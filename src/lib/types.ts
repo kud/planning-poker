@@ -1,0 +1,34 @@
+export type CardValue = string
+
+export type Card = {
+  value: CardValue
+  label?: string
+}
+
+export type DeckPreset = "fibonacci" | "numeric" | "tshirt" | "custom"
+
+export type Deck = {
+  preset: DeckPreset
+  cards: Card[]
+}
+
+export type Participant = {
+  id: string
+  name: string
+  avatar: string
+  vote: CardValue | null
+  isHost: boolean
+}
+
+export type RoomState = {
+  story: string
+  deck: Deck
+  participants: Record<string, Participant>
+  revealed: boolean
+}
+
+export type Message =
+  | { type: "join"; name: string; avatar: string }
+  | { type: "vote"; value: CardValue }
+  | { type: "update-profile"; name: string; avatar: string }
+  | { type: "state"; state: RoomState }
