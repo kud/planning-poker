@@ -111,16 +111,16 @@ export const ParticipantCard = ({
         </motion.div>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex flex-col items-center gap-0.5">
         <img
           src={avatarUrl(participant.avatar || participant.name)}
           alt={participant.name}
-          className="w-7 h-7 rounded-lg flex-none"
+          className="w-8 h-8 rounded-lg"
         />
         <span className={cn("text-sm font-medium", colors.name)}>
           {participant.name}
-          {participant.isHost && <span className="ml-0.5">👑</span>}
         </span>
+        {participant.isHost && <span className="text-xs">👑</span>}
       </div>
     </div>
   )

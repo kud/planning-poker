@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import type { DataConnection, Peer as PeerType } from "peerjs"
 import { defaultDeck } from "@/lib/decks"
+import { peerOptions } from "@/lib/peer-config"
 import { Card, Deck, Message, RoomState } from "@/lib/types"
 
 const buildInitialState = (hostId: string): RoomState => ({
@@ -59,7 +60,7 @@ export const usePeerHost = (hostName: string, hostAvatar: string) => {
     const init = async () => {
       const { default: Peer } = await import("peerjs")
       if (cancelled) return
-      peer = new Peer()
+      peer = new Peer(peerOptions())
       peerRef.current = peer
 
       peer.on("open", (id) => {

@@ -436,7 +436,7 @@ export const RoomView = ({
               <motion.div
                 key={me.vote}
                 className="absolute left-1/2"
-                style={{ x: "-50%", bottom: -88 }}
+                style={{ x: "-50%", bottom: -130 }}
                 initial={{ y: 20, scale: 0, opacity: 0 }}
                 animate={{ y: 0, scale: 1, opacity: 1 }}
                 exit={{ y: 20, scale: 0, opacity: 0 }}
