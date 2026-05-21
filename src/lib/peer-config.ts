@@ -1,19 +1,14 @@
 import type { PeerJSOption } from "peerjs"
 
-const buildIceServers = (): RTCIceServer[] => {
-  const servers: RTCIceServer[] = [{ urls: "stun:stun.l.google.com:19302" }]
-
-  const url = process.env.NEXT_PUBLIC_TURN_URL
-  const username = process.env.NEXT_PUBLIC_TURN_USERNAME
-  const credential = process.env.NEXT_PUBLIC_TURN_CREDENTIAL
-
-  if (url && username && credential) {
-    servers.push({ urls: url, username, credential })
+export const fetchPeerOptions = async (): Promise<PeerJSOption> => {
+  try {
+    const res = await fetch("/api/turn")
+    if (!res.ok) throw new Error("turn fetch failed")
+    const iceServers: RTCIceServer[] = await res.json()
+    return { config: { iceServers } }
+  } catch {
+    return {
+      config: { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] },
+    }
   }
-
-  return servers
 }
-
-export const peerOptions = (): PeerJSOption => ({
-  config: { iceServers: buildIceServers() },
-})

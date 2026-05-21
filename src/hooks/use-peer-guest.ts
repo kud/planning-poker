@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import type { DataConnection, Peer as PeerType } from "peerjs"
-import { peerOptions } from "@/lib/peer-config"
+import { fetchPeerOptions } from "@/lib/peer-config"
 import { Message, RoomState } from "@/lib/types"
 
 export const usePeerGuest = (hostId: string, name: string, avatar: string) => {
@@ -21,7 +21,9 @@ export const usePeerGuest = (hostId: string, name: string, avatar: string) => {
     const init = async () => {
       const { default: Peer } = await import("peerjs")
       if (cancelled) return
-      peer = new Peer(peerOptions())
+      const options = await fetchPeerOptions()
+      if (cancelled) return
+      peer = new Peer(options)
 
       peer.on("open", (id) => {
         if (cancelled) {
