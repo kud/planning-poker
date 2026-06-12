@@ -85,7 +85,7 @@ export const ReactionBar = ({ onReact, theme }: Props) => {
             exit={{ opacity: 0, y: 8, scale: 0.92 }}
             transition={{ type: "spring", stiffness: 380, damping: 26 }}
             className={cn(
-              "absolute bottom-full right-0 mb-2 grid grid-cols-5 sm:grid-cols-8 gap-2 rounded-2xl border p-3 shadow-xl backdrop-blur-md",
+              "absolute bottom-full right-0 mb-2 w-max grid grid-cols-5 sm:grid-cols-8 gap-2 rounded-2xl border p-3 shadow-xl backdrop-blur-md",
               surface,
             )}
           >
