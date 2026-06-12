@@ -113,7 +113,7 @@ const LandingForm = () => {
       transition={{ type: "spring", stiffness: 280, damping: 28, delay: 0.15 }}
       className="w-full max-w-sm"
     >
-      <div className="bg-white/95 backdrop-blur-lg rounded-3xl shadow-[0_24px_80px_rgba(0,0,0,0.55)] border border-white/20 p-7 flex flex-col gap-5">
+      <div className="bg-white/95 text-slate-900 backdrop-blur-lg rounded-3xl shadow-[0_24px_80px_rgba(0,0,0,0.55)] border border-white/20 p-7 flex flex-col gap-5">
         <div className="flex rounded-xl border overflow-hidden bg-muted/40">
           {(["create", "join"] as const).map((m) => (
             <button
