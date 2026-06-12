@@ -12,17 +12,24 @@ type Props = {
   participant: Participant
   revealed: boolean
   index: number
+  dealFrom?: { x: number; y: number }
 }
 
-export const TableCard = ({ participant, revealed, index }: Props) => {
+export const TableCard = ({
+  participant,
+  revealed,
+  index,
+  dealFrom,
+}: Props) => {
   const showValue = revealed && participant.vote !== null
+  const origin = dealFrom ?? { x: 0, y: 14 }
 
   return (
     <motion.div
-      initial={{ scale: 0, y: 14 }}
-      animate={{ scale: 1, y: 0 }}
-      exit={{ scale: 0, y: 14 }}
-      transition={{ type: "spring", stiffness: 380, damping: 24 }}
+      initial={{ scale: 0.6, x: origin.x, y: origin.y, opacity: 0 }}
+      animate={{ scale: 1, x: 0, y: 0, opacity: 1 }}
+      exit={{ scale: 0.6, x: origin.x, y: origin.y, opacity: 0 }}
+      transition={{ type: "spring", stiffness: 330, damping: 26 }}
       style={{ perspective: 900 }}
       className="w-10 h-14 sm:w-12 sm:h-16"
     >

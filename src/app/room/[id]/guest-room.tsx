@@ -128,6 +128,7 @@ const GuestRoomConnected = ({
     <RoomView
       state={state}
       myId={clientId}
+      roomId={roomId}
       isHost={isHost}
       onVote={vote}
       onReveal={reveal}

@@ -13,6 +13,15 @@ import { Deck, RoomState } from "@/lib/types"
 import { SettingsDialog } from "@/components/settings-dialog"
 import { OnboardingHints } from "@/components/onboarding-hints"
 import { PixelPet } from "@/components/pixel-pet"
+import {
+  isMuted,
+  setMuted,
+  playVote,
+  playReveal,
+  playConsensus,
+  playDice,
+  playNewRound,
+} from "@/lib/sounds"
 import { saveSettings } from "@/lib/settings"
 
 type Theme = "dark" | "light"
@@ -20,6 +29,7 @@ type Theme = "dark" | "light"
 type Props = {
   state: RoomState
   myId: string
+  roomId?: string
   isHost: boolean
   onVote: (value: string) => void
   onReveal?: () => void
@@ -229,6 +239,7 @@ const RoundControls = ({
   voteCount,
   allVoted,
   total,
+  roomId,
   onReveal,
   onReset,
   onRollSpeaker,
@@ -238,80 +249,105 @@ const RoundControls = ({
   voteCount: number
   allVoted: boolean
   total: number
+  roomId?: string
   onReveal?: () => void
   onReset?: () => void
   onRollSpeaker?: () => void
-}) => (
-  <AnimatePresence mode="wait">
-    {!state.revealed ? (
-      <motion.div
-        key="pre-reveal"
-        initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.9 }}
-        transition={{ duration: 0.2 }}
-        className="flex flex-col items-center gap-2 sm:gap-3"
-      >
-        <span className="text-[10px] sm:text-xs font-semibold text-white/40 tracking-widest uppercase text-center">
-          {allVoted
-            ? "All voted — ready to reveal"
-            : `${voteCount} of ${total} voted`}
-        </span>
-        {isHost && (
-          <Button
-            size="sm"
-            data-tour="reveal"
-            onClick={onReveal}
-            className={cn(
-              "bg-red-700 hover:bg-red-600 text-white border border-yellow-500/40 shadow-[0_0_20px_rgba(185,28,28,0.6),inset_0_1px_0_rgba(255,220,100,0.2)] font-semibold tracking-wide",
-              voteCount === 0 && "opacity-40 pointer-events-none",
-            )}
-          >
-            Reveal cards
-          </Button>
-        )}
-      </motion.div>
-    ) : (
-      <motion.div
-        key="post-reveal"
-        initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.9 }}
-        transition={{ duration: 0.2 }}
-        className="flex flex-col md:flex-row items-center justify-center gap-2 md:gap-5"
-      >
-        <VoteSummary
-          participants={state.participants}
-          revealed={state.revealed}
-        />
-        {isHost && (
-          <div className="flex items-center gap-2 flex-none">
-            {onRollSpeaker && total > 1 && (
-              <Button
-                size="sm"
-                onClick={onRollSpeaker}
-                className="border border-amber-400/30 bg-amber-500/15 text-amber-100 hover:bg-amber-500/25"
-              >
-                🎲 Speaker
-              </Button>
-            )}
+}) => {
+  const pending = Object.values(state.participants).filter(
+    (p) => p.vote === null,
+  )
+  const status =
+    total <= 1
+      ? null
+      : allVoted
+        ? "All voted — ready to reveal"
+        : pending.length === 1
+          ? `Waiting for ${pending[0].name}…`
+          : `${voteCount} of ${total} voted`
+
+  return (
+    <AnimatePresence mode="wait">
+      {!state.revealed ? (
+        <motion.div
+          key="pre-reveal"
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.9 }}
+          transition={{ duration: 0.2 }}
+          className="flex flex-col items-center gap-2 sm:gap-3"
+        >
+          {status ? (
+            <span className="text-[10px] sm:text-xs font-semibold text-white/40 tracking-widest uppercase text-center">
+              {status}
+            </span>
+          ) : (
+            <div className="flex flex-col items-center gap-0.5">
+              <span className="text-[10px] font-semibold text-white/40 tracking-widest uppercase">
+                It&apos;s quiet in here — room code
+              </span>
+              <span className="text-xl sm:text-2xl font-mono font-bold tracking-[0.25em] text-white/90">
+                {roomId}
+              </span>
+            </div>
+          )}
+          {isHost && (
             <Button
               size="sm"
-              onClick={onReset}
-              className="border-white/20 bg-white/10 text-white hover:bg-white/20"
+              data-tour="reveal"
+              onClick={onReveal}
+              className={cn(
+                "bg-red-700 hover:bg-red-600 text-white border border-yellow-500/40 shadow-[0_0_20px_rgba(185,28,28,0.6),inset_0_1px_0_rgba(255,220,100,0.2)] font-semibold tracking-wide",
+                voteCount === 0 && "opacity-40 pointer-events-none",
+              )}
             >
-              New round
+              Reveal cards
             </Button>
-          </div>
-        )}
-      </motion.div>
-    )}
-  </AnimatePresence>
-)
+          )}
+        </motion.div>
+      ) : (
+        <motion.div
+          key="post-reveal"
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.9 }}
+          transition={{ duration: 0.2 }}
+          className="flex flex-col md:flex-row items-center justify-center gap-2 md:gap-5"
+        >
+          <VoteSummary
+            participants={state.participants}
+            revealed={state.revealed}
+          />
+          {isHost && (
+            <div className="flex items-center gap-2 flex-none">
+              {onRollSpeaker && total > 1 && (
+                <Button
+                  size="sm"
+                  onClick={onRollSpeaker}
+                  className="border border-amber-400/30 bg-amber-500/15 text-amber-100 hover:bg-amber-500/25"
+                >
+                  🎲 Speaker
+                </Button>
+              )}
+              <Button
+                size="sm"
+                onClick={onReset}
+                className="border-white/20 bg-white/10 text-white hover:bg-white/20"
+              >
+                New round
+              </Button>
+            </div>
+          )}
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
+}
 
 export const RoomView = ({
   state,
   myId,
+  roomId,
   isHost,
   onVote,
   onReveal,
@@ -331,6 +367,17 @@ export const RoomView = ({
   } | null>(null)
   const [announcement, setAnnouncement] = useState<Announcement | null>(null)
   const [rollingDice, setRollingDice] = useState(false)
+  const [muted, setMutedState] = useState(false)
+
+  useEffect(() => {
+    setMutedState(isMuted())
+    playNewRound()
+  }, [])
+
+  const toggleMuted = () => {
+    setMuted(!muted)
+    setMutedState(!muted)
+  }
   const prevRevealed = useRef(false)
   const tableRef = useRef<HTMLDivElement>(null)
   const latestVotes = useRef<string[]>([])
@@ -344,6 +391,8 @@ export const RoomView = ({
     const was = prevRevealed.current
     prevRevealed.current = state.revealed
     if (was === state.revealed) return
+    if (state.revealed) playReveal()
+    else playNewRound()
     setAnnouncement(
       state.revealed
         ? revealQuip(latestVotes.current)
@@ -359,6 +408,7 @@ export const RoomView = ({
 
   useEffect(() => {
     if (!state.speaker) return
+    playDice()
     setRollingDice(true)
     const timer = setTimeout(() => setRollingDice(false), 900)
     return () => clearTimeout(timer)
@@ -377,6 +427,7 @@ export const RoomView = ({
 
   const handleVote = (value: string) => {
     onVote(value)
+    playVote()
     const tableVisible = tableRef.current?.offsetParent != null
     if (!tableVisible) return
     const card = state.deck.cards.find((c) => c.value === value)
@@ -416,6 +467,15 @@ export const RoomView = ({
   const voteCount = participants.filter((p) => p.vote !== null).length
   const s = THEME_STYLES[theme]
 
+  useEffect(() => {
+    document.title = state.revealed
+      ? "Revealed · Planning Poker"
+      : `${voteCount}/${participants.length} voted · Planning Poker`
+    return () => {
+      document.title = "Planning Poker"
+    }
+  }, [state.revealed, voteCount, participants.length])
+
   const votes = participants.map((p) => p.vote).filter(Boolean)
   const isConsensus =
     votes.length > 1 &&
@@ -424,6 +484,7 @@ export const RoomView = ({
 
   useEffect(() => {
     if (!state.revealed || !isConsensus) return
+    playConsensus()
     let cancelled = false
     import("canvas-confetti").then(({ default: confetti }) => {
       if (cancelled) return
@@ -470,6 +531,15 @@ export const RoomView = ({
         </div>
 
         <div className="flex items-center gap-1.5 sm:gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={toggleMuted}
+            className={`border text-sm ${s.themeBtn}`}
+            aria-label={muted ? "Unmute sounds" : "Mute sounds"}
+          >
+            {muted ? "🔇" : "🔊"}
+          </Button>
           <Button
             variant="ghost"
             size="sm"
@@ -556,6 +626,7 @@ export const RoomView = ({
                       participant={participant}
                       revealed={state.revealed}
                       index={i}
+                      dealFrom={{ x: 0, y: -16 }}
                     />
                   ) : (
                     <div
@@ -581,6 +652,7 @@ export const RoomView = ({
               voteCount={voteCount}
               allVoted={allVoted}
               total={participants.length}
+              roomId={roomId}
               onReveal={onReveal}
               onReset={onReset}
               onRollSpeaker={onRollSpeaker}
@@ -637,6 +709,7 @@ export const RoomView = ({
               voteCount={voteCount}
               allVoted={allVoted}
               total={participants.length}
+              roomId={roomId}
               onReveal={onReveal}
               onReset={onReset}
               onRollSpeaker={onRollSpeaker}
@@ -657,6 +730,10 @@ export const RoomView = ({
                       participant={participant}
                       revealed={state.revealed}
                       index={i}
+                      dealFrom={{
+                        x: 70 * Math.cos(seatAngle(i, seated.length)),
+                        y: 56 * Math.sin(seatAngle(i, seated.length)),
+                      }}
                     />
                   </div>
                 ),

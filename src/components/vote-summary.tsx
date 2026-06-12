@@ -1,7 +1,26 @@
 "use client"
 
-import { motion, AnimatePresence } from "framer-motion"
+import { useEffect, useState } from "react"
+import { motion, AnimatePresence, animate } from "framer-motion"
 import { Participant } from "@/lib/types"
+
+const CountUp = ({ value }: { value: number }) => {
+  const [display, setDisplay] = useState(0)
+
+  useEffect(() => {
+    const controls = animate(0, value, {
+      duration: 0.9,
+      ease: "easeOut",
+      onUpdate: setDisplay,
+    })
+    return () => controls.stop()
+  }, [value])
+
+  const settled = display === value
+  const formatted =
+    settled && value % 1 === 0 ? String(value) : display.toFixed(1)
+  return <>{formatted}</>
+}
 
 type Props = {
   participants: Record<string, Participant>
@@ -64,7 +83,7 @@ export const VoteSummary = ({ participants, revealed }: Props) => {
               className="flex flex-col items-center rounded-xl border border-primary/50 bg-primary/20 px-4 py-2 min-w-[52px] shadow-[0_0_16px_rgba(99,102,241,0.3)]"
             >
               <span className="text-xl font-bold text-indigo-300">
-                {avg % 1 === 0 ? avg : avg.toFixed(1)}
+                <CountUp value={avg % 1 === 0 ? avg : Number(avg.toFixed(1))} />
               </span>
               <span className="text-[11px] text-indigo-400">avg</span>
             </motion.div>
