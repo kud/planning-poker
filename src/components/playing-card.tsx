@@ -19,7 +19,7 @@ export const PlayingCard = ({ card, selected, disabled, onSelect }: Props) => (
     animate={selected ? { y: -16 } : { y: 0 }}
     transition={{ type: "spring", stiffness: 350, damping: 22 }}
     className={cn(
-      "flex w-14 h-20 rounded-xl border-2 flex-col items-center justify-center select-none cursor-pointer",
+      "flex w-11 h-16 sm:w-14 sm:h-20 rounded-lg sm:rounded-xl border-2 flex-col items-center justify-center select-none cursor-pointer",
       selected
         ? "border-primary bg-primary text-white shadow-[0_0_28px_rgba(99,102,241,0.65)]"
         : "border-white/20 bg-[#fffdf7] text-slate-900 shadow-[0_4px_20px_rgba(0,0,0,0.35)] hover:shadow-[0_8px_30px_rgba(99,102,241,0.3)] hover:border-primary/40",
@@ -28,7 +28,7 @@ export const PlayingCard = ({ card, selected, disabled, onSelect }: Props) => (
   >
     <span
       className={cn(
-        "text-2xl font-bold leading-none",
+        "text-xl sm:text-2xl font-bold leading-none",
         !selected && "text-slate-800",
       )}
     >

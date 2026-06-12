@@ -1,0 +1,66 @@
+"use client"
+
+import { motion } from "framer-motion"
+import { Participant } from "@/lib/types"
+
+const HATCH = [
+  "repeating-linear-gradient(45deg, rgba(99,102,241,0.25) 0px, rgba(99,102,241,0.25) 1px, transparent 1px, transparent 7px)",
+  "repeating-linear-gradient(-45deg, rgba(99,102,241,0.25) 0px, rgba(99,102,241,0.25) 1px, transparent 1px, transparent 7px)",
+].join(", ")
+
+type Props = {
+  participant: Participant
+  revealed: boolean
+  index: number
+}
+
+export const TableCard = ({ participant, revealed, index }: Props) => {
+  const showValue = revealed && participant.vote !== null
+
+  return (
+    <motion.div
+      initial={{ scale: 0, y: 14 }}
+      animate={{ scale: 1, y: 0 }}
+      exit={{ scale: 0, y: 14 }}
+      transition={{ type: "spring", stiffness: 380, damping: 24 }}
+      style={{ perspective: 900 }}
+      className="w-10 h-14 sm:w-12 sm:h-16"
+    >
+      <motion.div
+        animate={{ rotateY: showValue ? 0 : 180 }}
+        initial={{ rotateY: 180 }}
+        transition={{
+          duration: 0.6,
+          delay: revealed ? index * 0.08 : 0,
+          type: "spring",
+          stiffness: 180,
+          damping: 22,
+        }}
+        style={{
+          transformStyle: "preserve-3d",
+          position: "relative",
+          width: "100%",
+          height: "100%",
+        }}
+      >
+        <div
+          style={{ backfaceVisibility: "hidden" }}
+          className="absolute inset-0 rounded-lg border-2 border-primary bg-[#fffdf7] shadow-[0_0_18px_rgba(99,102,241,0.5)] flex items-center justify-center"
+        >
+          <span className="text-lg sm:text-xl font-bold text-slate-800">
+            {participant.vote}
+          </span>
+        </div>
+        <div
+          style={{
+            backfaceVisibility: "hidden",
+            transform: "rotateY(180deg)",
+            backgroundImage: HATCH,
+            backgroundColor: "rgb(23 25 56)",
+          }}
+          className="absolute inset-0 rounded-lg border-2 border-indigo-500/60 shadow-[0_4px_14px_rgba(0,0,0,0.45)]"
+        />
+      </motion.div>
+    </motion.div>
+  )
+}

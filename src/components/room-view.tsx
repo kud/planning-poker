@@ -4,7 +4,8 @@ import { useState, useEffect, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { ParticipantCard } from "@/components/participant-card"
+import { SeatAvatar } from "@/components/seat-avatar"
+import { TableCard } from "@/components/table-card"
 import { PlayingCard } from "@/components/playing-card"
 import { DeckSelector } from "@/components/deck-selector"
 import { VoteSummary } from "@/components/vote-summary"
@@ -63,28 +64,31 @@ const THEME_STYLES = {
   },
 }
 
-const TABLE_W = 640
-const TABLE_H = 268
-const SEAT_RX = TABLE_W / 2 + 56
-const SEAT_RY = TABLE_H / 2 + 68
-
-// Participants are positioned relative to the main area centre.
-// The bottom slot (angle π/2) is reserved for the current user (hand below).
-// index is 0-based among the filtered others; total includes current user.
-const computeSeatStyle = (
-  index: number,
-  total: number,
-): React.CSSProperties => {
-  const angle = Math.PI / 2 + (2 * Math.PI * (index + 1)) / total
-  const x = SEAT_RX * Math.cos(angle)
-  const y = SEAT_RY * Math.sin(angle)
-  return {
-    position: "absolute",
-    left: `calc(50% + ${x}px)`,
-    top: `calc(50% + ${y}px)`,
-    transform: "translate(-50%, -50%)",
-  }
+const FELT_SURFACE: React.CSSProperties = {
+  background: "linear-gradient(170deg, #1e6e40 0%, #145733 40%, #0d3d22 100%)",
+  boxShadow:
+    "inset 0 8px 32px rgba(0,0,0,0.5), 0 20px 60px rgba(0,0,0,0.6), 0 0 0 3px rgba(180,110,40,0.2)",
 }
+
+// Seats sit on an ellipse around the table, cards on a smaller ellipse on
+// the felt. Positions are percentages of the table wrapper, so the layout
+// scales with the viewport. The bottom slot (angle π/2) is the current user.
+const seatAngle = (index: number, total: number) =>
+  Math.PI / 2 + (2 * Math.PI * index) / total
+
+const seatStyle = (angle: number): React.CSSProperties => ({
+  position: "absolute",
+  left: `${50 + 60 * Math.cos(angle)}%`,
+  top: `${50 + 86 * Math.sin(angle)}%`,
+  transform: "translate(-50%, -50%)",
+})
+
+const cardStyle = (angle: number): React.CSSProperties => ({
+  position: "absolute",
+  left: `${50 + 37 * Math.cos(angle)}%`,
+  top: `${50 + 33 * Math.sin(angle)}%`,
+  transform: "translate(-50%, -50%)",
+})
 
 const ShareMenu = ({
   onCopyCode,
@@ -121,7 +125,7 @@ const ShareMenu = ({
         onClick={() => setOpen((v) => !v)}
         className={`border text-xs ${btnClass}`}
       >
-        {copiedMode ? "Copied ✓" : "Share room ▾"}
+        {copiedMode ? "Copied ✓" : "Share ▾"}
       </Button>
       {open && (
         <div
@@ -154,6 +158,78 @@ const ShareMenu = ({
     </div>
   )
 }
+
+const RoundControls = ({
+  state,
+  isHost,
+  voteCount,
+  allVoted,
+  total,
+  onReveal,
+  onReset,
+}: {
+  state: RoomState
+  isHost: boolean
+  voteCount: number
+  allVoted: boolean
+  total: number
+  onReveal?: () => void
+  onReset?: () => void
+}) => (
+  <AnimatePresence mode="wait">
+    {!state.revealed ? (
+      <motion.div
+        key="pre-reveal"
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.9 }}
+        transition={{ duration: 0.2 }}
+        className="flex flex-col items-center gap-2 sm:gap-3"
+      >
+        <span className="text-[10px] sm:text-xs font-semibold text-white/40 tracking-widest uppercase text-center">
+          {allVoted
+            ? "All voted — ready to reveal"
+            : `${voteCount} of ${total} voted`}
+        </span>
+        {isHost && (
+          <Button
+            size="sm"
+            onClick={onReveal}
+            className={cn(
+              "bg-red-700 hover:bg-red-600 text-white border border-yellow-500/40 shadow-[0_0_20px_rgba(185,28,28,0.6),inset_0_1px_0_rgba(255,220,100,0.2)] font-semibold tracking-wide",
+              voteCount === 0 && "opacity-40 pointer-events-none",
+            )}
+          >
+            Reveal cards
+          </Button>
+        )}
+      </motion.div>
+    ) : (
+      <motion.div
+        key="post-reveal"
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.9 }}
+        transition={{ duration: 0.2 }}
+        className="flex flex-col items-center gap-2 sm:gap-3"
+      >
+        <VoteSummary
+          participants={state.participants}
+          revealed={state.revealed}
+        />
+        {isHost && (
+          <Button
+            size="sm"
+            onClick={onReset}
+            className="border-white/20 bg-white/10 text-white hover:bg-white/20"
+          >
+            New round
+          </Button>
+        )}
+      </motion.div>
+    )}
+  </AnimatePresence>
+)
 
 export const RoomView = ({
   state,
@@ -188,21 +264,21 @@ export const RoomView = ({
   }
 
   const handleVote = (value: string) => {
+    onVote(value)
+    const tableVisible = tableRef.current?.offsetParent != null
+    if (!tableVisible) return
     const card = state.deck.cards.find((c) => c.value === value)
     const cardCenterFromTop = window.innerHeight - 110 - 40
-    const tableCenterFromTop = tableRef.current
-      ? tableRef.current.getBoundingClientRect().top + TABLE_H / 2
-      : window.innerHeight * 0.42
-    const targetY = tableCenterFromTop - cardCenterFromTop
+    const rect = tableRef.current!.getBoundingClientRect()
+    const targetY = rect.top + rect.height / 2 - cardCenterFromTop
     setFlyingCard({ ...(card ?? { value }), targetY })
-    onVote(value)
-    const t = setTimeout(() => setFlyingCard(null), 750)
-    return () => clearTimeout(t)
+    setTimeout(() => setFlyingCard(null), 750)
   }
 
   const me = state.participants[myId]
   const participants = Object.values(state.participants)
   const others = participants.filter((p) => p.id !== myId)
+  const seated = me ? [me, ...others] : others
   const allVoted = participants.every((p) => p.vote !== null)
   const voteCount = participants.filter((p) => p.vote !== null).length
   const s = THEME_STYLES[theme]
@@ -232,18 +308,20 @@ export const RoomView = ({
 
   return (
     <div
-      className={`flex flex-col h-screen ${s.text}`}
+      className={`flex flex-col h-dvh ${s.text}`}
       style={{ background: s.bg }}
     >
       {/* Header */}
       <header
-        className={`flex-none border-b ${s.header} backdrop-blur-md px-6 py-3 flex items-center justify-between gap-4 z-10`}
+        className={`flex-none border-b ${s.header} backdrop-blur-md px-3 sm:px-6 py-2 sm:py-3 flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5 z-10`}
       >
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <span className="text-xl">🃏</span>
-          <span className="font-semibold tracking-tight">Planning Poker</span>
+          <span className="font-semibold tracking-tight hidden md:inline">
+            Planning Poker
+          </span>
           <span
-            className="text-xs font-mono px-2 py-0.5 rounded-full border"
+            className="text-[11px] sm:text-xs font-mono px-2 py-0.5 rounded-full border whitespace-nowrap"
             style={{
               borderColor: s.badge.border,
               color: s.badge.color,
@@ -258,7 +336,7 @@ export const RoomView = ({
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2">
           <Button
             variant="ghost"
             size="sm"
@@ -308,188 +386,174 @@ export const RoomView = ({
         </div>
       </header>
 
-      {/* Table area — fills remaining space; table centred, others around it */}
-      <main className="flex-1 relative overflow-hidden">
-        {/* Pool table */}
-        <div
-          ref={tableRef}
-          style={{
-            position: "absolute",
-            width: TABLE_W,
-            height: TABLE_H,
-            left: "50%",
-            top: "50%",
-            transform: "translate(-50%, -50%)",
-            borderRadius: TABLE_H / 2,
-
-            background:
-              "linear-gradient(170deg, #1e6e40 0%, #145733 40%, #0d3d22 100%)",
-            border: "12px solid #6b3d12",
-            boxShadow:
-              "inset 0 8px 32px rgba(0,0,0,0.5), 0 20px 60px rgba(0,0,0,0.6), 0 0 0 3px rgba(180,110,40,0.2)",
-          }}
-        >
-          {/* Clipped: centre line + shimmer */}
+      {/* Table area */}
+      <main className="flex-1 relative flex items-center justify-center overflow-hidden">
+        {/* Mobile — roster grid, no table */}
+        <div className="md:hidden w-full max-h-full overflow-y-auto px-4 py-5 flex flex-col items-center gap-6">
           <div
-            className="absolute inset-0 overflow-hidden pointer-events-none"
-            style={{ borderRadius: TABLE_H / 2 - 10 }}
+            className={cn(
+              "grid gap-x-3 gap-y-5 justify-items-center w-full max-w-sm",
+              seated.length > 6 ? "grid-cols-4" : "grid-cols-3",
+            )}
           >
-            <div
-              className="absolute top-1/2"
-              style={{
-                left: "10%",
-                right: "10%",
-                height: 1,
-                transform: "translateY(-50%)",
-                background:
-                  "linear-gradient(to right, transparent, rgba(255,255,255,0.13) 30%, rgba(255,255,255,0.13) 70%, transparent)",
-              }}
-            />
-            <motion.div
-              style={{
-                position: "absolute",
-                width: "55%",
-                height: "160%",
-                top: "-30%",
-                skewX: -18,
-                background:
-                  "linear-gradient(to right, transparent 0%, rgba(255,255,255,0.07) 50%, transparent 100%)",
-              }}
-              animate={{ left: ["-60%", "120%"] }}
-              transition={{
-                duration: 3,
-                ease: "easeInOut",
-                repeat: Infinity,
-                repeatDelay: 5,
-              }}
-            />
-          </div>
-
-          {/* Table centre content — text above the line, button below */}
-          <div className="absolute inset-0 flex flex-col px-16">
-            <AnimatePresence mode="wait">
-              {!state.revealed ? (
+            <AnimatePresence>
+              {seated.map((participant, i) => (
                 <motion.div
-                  key="pre-reveal"
-                  initial={{ opacity: 0, scale: 0.9 }}
+                  key={participant.id}
+                  initial={{ opacity: 0, scale: 0.5 }}
                   animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.9 }}
-                  transition={{ duration: 0.2 }}
-                  className="contents"
+                  exit={{ opacity: 0, scale: 0.5 }}
+                  transition={{
+                    type: "spring",
+                    stiffness: 300,
+                    damping: 24,
+                    delay: i * 0.04,
+                  }}
+                  className="flex flex-col items-center gap-2"
                 >
-                  <div className="flex-1 flex items-end justify-center pb-3">
-                    <span className="text-xs font-semibold text-white/40 tracking-widest uppercase">
-                      {allVoted
-                        ? "All voted — ready to reveal"
-                        : `${voteCount} of ${participants.length} voted`}
-                    </span>
-                  </div>
-                  <div className="flex-1 flex items-start justify-center pt-3">
-                    {isHost && (
-                      <Button
-                        size="sm"
-                        onClick={onReveal}
-                        className={cn(
-                          "bg-red-700 hover:bg-red-600 text-white border border-yellow-500/40 shadow-[0_0_20px_rgba(185,28,28,0.6),inset_0_1px_0_rgba(255,220,100,0.2)] font-semibold tracking-wide",
-                          voteCount === 0 && "opacity-40 pointer-events-none",
-                        )}
-                      >
-                        Reveal cards
-                      </Button>
-                    )}
-                  </div>
-                </motion.div>
-              ) : (
-                <motion.div
-                  key="post-reveal"
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.9 }}
-                  transition={{ duration: 0.2 }}
-                  className="contents"
-                >
-                  <div className="flex-1 flex items-end justify-center pb-3">
-                    <VoteSummary
-                      participants={state.participants}
+                  <SeatAvatar participant={participant} theme={theme} />
+                  {participant.vote !== null ? (
+                    <TableCard
+                      participant={participant}
                       revealed={state.revealed}
+                      index={i}
                     />
-                  </div>
-                  <div className="flex-1 flex items-start justify-center pt-3">
-                    {isHost && (
-                      <Button
-                        size="sm"
-                        onClick={onReset}
-                        className="border-white/20 bg-white/10 text-white hover:bg-white/20"
-                      >
-                        New round
-                      </Button>
-                    )}
-                  </div>
+                  ) : (
+                    <div
+                      className={cn(
+                        "w-10 h-14 rounded-lg border-2 border-dashed",
+                        theme === "dark"
+                          ? "border-white/15"
+                          : "border-slate-300",
+                      )}
+                    />
+                  )}
                 </motion.div>
-              )}
+              ))}
             </AnimatePresence>
           </div>
-
-          {/* Current user's card — rests just below the bottom rail */}
-          <AnimatePresence>
-            {me?.vote && (
-              <motion.div
-                key={me.vote}
-                className="absolute left-1/2"
-                style={{ x: "-50%", bottom: -130 }}
-                initial={{ y: 20, scale: 0, opacity: 0 }}
-                animate={{ y: 0, scale: 1, opacity: 1 }}
-                exit={{ y: 20, scale: 0, opacity: 0 }}
-                transition={{
-                  type: "spring",
-                  stiffness: 380,
-                  damping: 26,
-                  delay: 0.44,
-                }}
-              >
-                <ParticipantCard
-                  participant={me}
-                  revealed={state.revealed}
-                  index={0}
-                  theme={theme}
-                />
-              </motion.div>
-            )}
-          </AnimatePresence>
+          <div
+            className="w-full max-w-sm rounded-[3rem] px-6 py-6 flex items-center justify-center"
+            style={{ ...FELT_SURFACE, border: "8px solid #6b3d12" }}
+          >
+            <RoundControls
+              state={state}
+              isHost={isHost}
+              voteCount={voteCount}
+              allVoted={allVoted}
+              total={participants.length}
+              onReveal={onReveal}
+              onReset={onReset}
+            />
+          </div>
         </div>
 
-        {/* Other participants seated around the table */}
-        <AnimatePresence>
-          {others.map((participant, i) => (
-            <motion.div
-              key={participant.id}
-              initial={{ opacity: 0, scale: 0.5 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.5 }}
-              transition={{
-                type: "spring",
-                stiffness: 300,
-                damping: 24,
-                delay: i * 0.05,
-              }}
-              style={computeSeatStyle(i, participants.length)}
+        {/* Desktop — poker table */}
+        <div
+          ref={tableRef}
+          className="relative hidden md:block"
+          style={{ width: "min(640px, 74vw)", aspectRatio: "640 / 268" }}
+        >
+          {/* Felt */}
+          <div
+            className="absolute inset-0"
+            style={{
+              ...FELT_SURFACE,
+              borderRadius: 9999,
+              border: "10px solid #6b3d12",
+            }}
+          >
+            <div
+              className="absolute inset-0 overflow-hidden pointer-events-none"
+              style={{ borderRadius: 9999 }}
             >
-              <ParticipantCard
-                participant={participant}
-                revealed={state.revealed}
-                index={i}
-                theme={theme}
+              <motion.div
+                style={{
+                  position: "absolute",
+                  width: "55%",
+                  height: "160%",
+                  top: "-30%",
+                  skewX: -18,
+                  background:
+                    "linear-gradient(to right, transparent 0%, rgba(255,255,255,0.07) 50%, transparent 100%)",
+                }}
+                animate={{ left: ["-60%", "120%"] }}
+                transition={{
+                  duration: 3,
+                  ease: "easeInOut",
+                  repeat: Infinity,
+                  repeatDelay: 5,
+                }}
               />
-            </motion.div>
-          ))}
-        </AnimatePresence>
+            </div>
+          </div>
+
+          {/* Centre content */}
+          <div className="absolute inset-0 flex items-center justify-center px-[12%]">
+            <RoundControls
+              state={state}
+              isHost={isHost}
+              voteCount={voteCount}
+              allVoted={allVoted}
+              total={participants.length}
+              onReveal={onReveal}
+              onReset={onReset}
+            />
+          </div>
+
+          {/* Cards on the felt — one per participant who has voted */}
+          <AnimatePresence>
+            {seated.map(
+              (participant, i) =>
+                participant.vote !== null && (
+                  <div
+                    key={`card-${participant.id}`}
+                    className="pointer-events-none"
+                    style={cardStyle(seatAngle(i, seated.length))}
+                  >
+                    <TableCard
+                      participant={participant}
+                      revealed={state.revealed}
+                      index={i}
+                    />
+                  </div>
+                ),
+            )}
+          </AnimatePresence>
+
+          {/* Seats around the table — presence */}
+          <AnimatePresence>
+            {seated.map((participant, i) => (
+              <motion.div
+                key={participant.id}
+                initial={{ opacity: 0, scale: 0.5 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.5 }}
+                transition={{
+                  type: "spring",
+                  stiffness: 300,
+                  damping: 24,
+                  delay: i * 0.05,
+                }}
+                style={seatStyle(seatAngle(i, seated.length))}
+              >
+                <SeatAvatar participant={participant} theme={theme} />
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </div>
       </main>
 
-      {/* Hand — anchored to the bottom of the screen */}
-      <div className={cn("flex-none border-t px-6 pt-6 pb-4", s.hand)}>
-        <div className="flex flex-col items-center gap-5">
+      {/* Hand */}
+      <div
+        className={cn(
+          "flex-none border-t px-3 sm:px-6 pt-4 sm:pt-6 pb-3 sm:pb-4",
+          s.hand,
+        )}
+      >
+        <div className="flex flex-col items-center gap-3 sm:gap-5">
           <p
-            className={`text-xs font-medium tracking-wide uppercase ${s.handLabel}`}
+            className={`text-[10px] sm:text-xs font-medium tracking-wide uppercase ${s.handLabel}`}
           >
             {state.revealed ? "Waiting for next round…" : "Your hand"}
           </p>
@@ -500,11 +564,12 @@ export const RoomView = ({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.18 }}
-              className="flex flex-nowrap gap-3 justify-center"
+              className="flex flex-wrap justify-center sm:flex-nowrap sm:overflow-x-auto gap-2 sm:gap-3 max-w-full px-2 pt-3 sm:pt-4 pb-1"
             >
               {state.deck.cards.map((card, i) => (
                 <motion.div
                   key={card.value}
+                  className="flex-none"
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{

@@ -40,6 +40,8 @@ export default class PokerRoom implements Party.Server {
   private hostSecret: string | null = null
   private connToClientId = new Map<string, string>()
   private connToSecret = new Map<string, string>()
+  private connToProfile = new Map<string, { name: string; avatar: string }>()
+  private connCounts = new Map<string, number>()
 
   constructor(readonly room: Party.Room) {}
 
@@ -59,7 +61,9 @@ export default class PokerRoom implements Party.Server {
     const avatar = url.searchParams.get("avatar") ?? ""
 
     this.connToClientId.set(conn.id, clientId)
+    this.connToProfile.set(conn.id, { name, avatar })
     if (secret) this.connToSecret.set(conn.id, secret)
+    this.connCounts.set(clientId, (this.connCounts.get(clientId) ?? 0) + 1)
 
     if (secret && !this.hostSecret) {
       this.hostSecret = secret
@@ -67,24 +71,48 @@ export default class PokerRoom implements Party.Server {
     }
 
     const isHost = !!secret && secret === this.hostSecret
-    const resolved = uniqueName(name, this.state.participants)
+    const existing = this.state.participants[clientId]
     this.state = {
       ...this.state,
       participants: {
         ...this.state.participants,
-        [clientId]: {
-          id: clientId,
-          name: resolved,
-          avatar,
-          vote: null,
-          isHost,
-        },
+        [clientId]: existing
+          ? { ...existing, avatar, isHost }
+          : {
+              id: clientId,
+              name: uniqueName(name, this.state.participants),
+              avatar,
+              vote: null,
+              isHost,
+            },
       },
     }
 
     this.room.broadcast(
       JSON.stringify({ type: "state", state: this.state } satisfies Message),
     )
+  }
+
+  private ensureParticipant(clientId: string, connId: string) {
+    if (this.state.participants[clientId]) return
+    const profile = this.connToProfile.get(connId) ?? {
+      name: "Guest",
+      avatar: "",
+    }
+    const secret = this.connToSecret.get(connId) ?? ""
+    this.state = {
+      ...this.state,
+      participants: {
+        ...this.state.participants,
+        [clientId]: {
+          id: clientId,
+          name: uniqueName(profile.name, this.state.participants),
+          avatar: profile.avatar,
+          vote: null,
+          isHost: !!secret && secret === this.hostSecret,
+        },
+      },
+    }
   }
 
   onMessage(message: string, sender: Party.Connection) {
@@ -95,7 +123,7 @@ export default class PokerRoom implements Party.Server {
 
     switch (msg.type) {
       case "vote": {
-        if (!this.state.participants[clientId]) break
+        this.ensureParticipant(clientId, sender.id)
         this.state = {
           ...this.state,
           participants: {
@@ -109,7 +137,7 @@ export default class PokerRoom implements Party.Server {
         break
       }
       case "update-profile": {
-        if (!this.state.participants[clientId]) break
+        this.ensureParticipant(clientId, sender.id)
         const excluded = Object.fromEntries(
           Object.entries(this.state.participants).filter(
             ([id]) => id !== clientId,
@@ -169,6 +197,14 @@ export default class PokerRoom implements Party.Server {
     const clientId = this.connToClientId.get(conn.id) ?? conn.id
     this.connToClientId.delete(conn.id)
     this.connToSecret.delete(conn.id)
+    this.connToProfile.delete(conn.id)
+
+    const remaining = (this.connCounts.get(clientId) ?? 1) - 1
+    if (remaining > 0) {
+      this.connCounts.set(clientId, remaining)
+      return
+    }
+    this.connCounts.delete(clientId)
 
     if (!this.state.participants[clientId]) return
     const participants = { ...this.state.participants }
