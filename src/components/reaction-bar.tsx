@@ -124,16 +124,33 @@ export const ReactionBar = ({ onReact, theme }: Props) => {
             {emoji}
           </motion.button>
         ))}
+        <div
+          className={cn(
+            "hidden sm:block w-px h-5 mx-0.5",
+            theme === "dark" ? "bg-white/15" : "bg-slate-200",
+          )}
+        />
         <button
           onClick={() => setOpen((v) => !v)}
           aria-label="More reactions"
+          title="More reactions"
           className={cn(
-            "flex w-8 h-8 rounded-full text-lg items-center justify-center transition-colors",
+            "relative flex w-8 h-8 rounded-full text-lg items-center justify-center transition-colors",
             hover,
             open && (theme === "dark" ? "bg-white/10" : "bg-slate-100"),
           )}
         >
           😊
+          <span
+            className={cn(
+              "absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full text-[9px] font-bold flex items-center justify-center leading-none border",
+              theme === "dark"
+                ? "bg-indigo-500 text-white border-[#171a2c]"
+                : "bg-indigo-500 text-white border-white",
+            )}
+          >
+            +
+          </span>
         </button>
       </div>
     </div>
