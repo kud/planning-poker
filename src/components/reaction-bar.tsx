@@ -85,7 +85,7 @@ export const ReactionBar = ({ onReact, theme }: Props) => {
             exit={{ opacity: 0, y: 8, scale: 0.92 }}
             transition={{ type: "spring", stiffness: 380, damping: 26 }}
             className={cn(
-              "absolute bottom-full right-0 mb-2 grid grid-cols-5 sm:grid-cols-8 gap-1 rounded-2xl border p-2 shadow-xl backdrop-blur-md max-h-56 overflow-y-auto",
+              "absolute bottom-full right-0 mb-2 grid grid-cols-5 sm:grid-cols-8 gap-2 rounded-2xl border p-3 shadow-xl backdrop-blur-md max-h-64 overflow-y-auto",
               surface,
             )}
           >
@@ -94,7 +94,7 @@ export const ReactionBar = ({ onReact, theme }: Props) => {
                 key={emoji}
                 onClick={() => fire(emoji)}
                 className={cn(
-                  "w-9 h-9 rounded-lg text-xl flex items-center justify-center transition-colors",
+                  "w-10 h-10 rounded-xl text-xl flex items-center justify-center transition-colors",
                   hover,
                 )}
               >
