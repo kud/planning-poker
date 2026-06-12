@@ -56,7 +56,7 @@ export default class PokerRoom implements Party.Server {
   }
 
   onRequest() {
-    return Response.redirect("https://estimation-poker.vercel.app", 302)
+    return Response.redirect("https://lets-planning-poker.vercel.app", 302)
   }
 
   onConnect(conn: Party.Connection, ctx: Party.ConnectionContext) {
