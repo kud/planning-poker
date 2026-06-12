@@ -2,7 +2,7 @@
   "name": "planning-poker",
   "version": "1.0.0",
   "license": "MIT",
-  "homepage": "https://kud.github.io/planning-poker",
+  "homepage": "https://lets-planning-poker.vercel.app",
   "private": true,
   "scripts": {
     "dev": "next dev",
