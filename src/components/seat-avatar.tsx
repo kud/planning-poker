@@ -71,7 +71,7 @@ export const SeatAvatar = ({
             </motion.span>
             <motion.span
               className="absolute inset-0 rounded-xl ring-2 ring-amber-300/80 pointer-events-none"
-              animate={{ opacity: [0.9, 0.3, 0.9], scale: [1, 1.18, 1] }}
+              animate={{ opacity: [1, 0.35, 1] }}
               transition={{
                 duration: 1.4,
                 repeat: Infinity,
