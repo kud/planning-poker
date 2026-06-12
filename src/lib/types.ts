@@ -36,3 +36,5 @@ export type Message =
   | { type: "reset" }
   | { type: "set-deck"; deck: Deck }
   | { type: "roll-speaker" }
+  | { type: "react"; emoji: string }
+  | { type: "reaction"; from: string; name: string; emoji: string }

@@ -160,22 +160,25 @@ export const playPurr = () => {
   throat.gain.value = 6
 
   const pulse = audio.createGain()
-  pulse.gain.value = 0.72
+  pulse.gain.value = 0.74
   const lfo = audio.createOscillator()
   const lfoDepth = audio.createGain()
-  lfoDepth.gain.value = 0.28
+  lfoDepth.gain.value = 0.22
   lfo.connect(lfoDepth)
   lfoDepth.connect(pulse.gain)
 
+  // Organic throb: a regular rate sounds like an engine, so the flutter
+  // rate wanders randomly every fraction of a second.
+  for (let jt = 0; jt < duration; jt += 0.3 + Math.random() * 0.2) {
+    lfo.frequency.setValueAtTime(22 + Math.random() * 6, start + jt)
+  }
+
+  const body = audio.createOscillator()
   const bodyGain = audio.createGain()
-  bodyGain.gain.value = 0.22
-  const bodies = [118, 123].map((frequency) => {
-    const osc = audio.createOscillator()
-    osc.type = "sine"
-    osc.frequency.value = frequency
-    osc.connect(bodyGain)
-    return osc
-  })
+  body.type = "sine"
+  body.frequency.value = 95
+  bodyGain.gain.value = 0.16
+  body.connect(bodyGain)
   bodyGain.connect(pulse)
 
   // Asymmetric breathing: a quicker, brighter inhale swell, then a longer,
@@ -190,8 +193,6 @@ export const playPurr = () => {
     envelope.gain.linearRampToValueAtTime(0.1, t + INHALE + EXHALE)
     lowpass.frequency.setValueAtTime(280, t)
     lowpass.frequency.linearRampToValueAtTime(180, t + INHALE + EXHALE)
-    lfo.frequency.setValueAtTime(27, t)
-    lfo.frequency.linearRampToValueAtTime(23, t + INHALE + EXHALE)
     t += INHALE + EXHALE + 0.05
   }
   envelope.gain.linearRampToValueAtTime(0.0001, t + 0.15)
@@ -205,10 +206,8 @@ export const playPurr = () => {
   source.start(start)
   lfo.start(start)
   lfo.stop(start + duration)
-  bodies.forEach((osc) => {
-    osc.start(start)
-    osc.stop(start + duration)
-  })
+  body.start(start)
+  body.stop(start + duration)
 }
 
 export const playClink = () => {

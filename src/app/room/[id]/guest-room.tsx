@@ -74,6 +74,8 @@ const GuestRoomConnected = ({
   const {
     state,
     connected,
+    reactions,
+    react,
     vote,
     reveal,
     reset,
@@ -139,6 +141,8 @@ const GuestRoomConnected = ({
       onReset={reset}
       onSetDeck={applyDeck}
       onRollSpeaker={rollSpeaker}
+      onReact={react}
+      reactions={reactions}
       onCopyCode={copyCode}
       onCopyLink={copyLink}
       copiedMode={copiedMode}

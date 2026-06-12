@@ -46,6 +46,7 @@ export default class PokerRoom implements Party.Server {
   private connToSecret = new Map<string, string>()
   private connToProfile = new Map<string, { name: string; avatar: string }>()
   private connCounts = new Map<string, number>()
+  private lastReactionAt = new Map<string, number>()
 
   constructor(readonly room: Party.Room) {}
 
@@ -241,6 +242,25 @@ export default class PokerRoom implements Party.Server {
           spoken: [...fresh, picked],
         }
         break
+      }
+      case "react": {
+        if (typeof msg.emoji !== "string" || msg.emoji.length > 16) return
+        const now = Date.now()
+        if (now - (this.lastReactionAt.get(sender.id) ?? 0) < 250) return
+        this.lastReactionAt.set(sender.id, now)
+        const name =
+          this.state.participants[clientId]?.name ??
+          this.connToProfile.get(sender.id)?.name ??
+          "Guest"
+        this.room.broadcast(
+          JSON.stringify({
+            type: "reaction",
+            from: clientId,
+            name,
+            emoji: msg.emoji,
+          } satisfies Message),
+        )
+        return
       }
       case "set-deck": {
         if (!isHost) return

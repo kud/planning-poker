@@ -1,8 +1,17 @@
 "use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
 import usePartySocket from "partysocket/react"
 import { Deck, Message, RoomState } from "@/lib/types"
+
+export type Reaction = {
+  id: number
+  from: string
+  name: string
+  emoji: string
+}
+
+const REACTION_LIFETIME_MS = 4000
 
 const PARTYKIT_HOST =
   process.env.NEXT_PUBLIC_PARTYKIT_HOST ??
@@ -27,6 +36,8 @@ export const usePartyRoom = ({
 }: Options) => {
   const [state, setState] = useState<RoomState | null>(null)
   const [connected, setConnected] = useState(false)
+  const [reactions, setReactions] = useState<Reaction[]>([])
+  const reactionId = useRef(0)
 
   const socket = usePartySocket({
     host: PARTYKIT_HOST,
@@ -46,6 +57,17 @@ export const usePartyRoom = ({
     onMessage(e: MessageEvent) {
       const msg = JSON.parse(e.data) as Message
       if (msg.type === "state") setState(msg.state)
+      if (msg.type === "reaction") {
+        const id = ++reactionId.current
+        setReactions((current) => [
+          ...current,
+          { id, from: msg.from, name: msg.name, emoji: msg.emoji },
+        ])
+        setTimeout(
+          () => setReactions((current) => current.filter((r) => r.id !== id)),
+          REACTION_LIFETIME_MS,
+        )
+      }
     },
   })
 
@@ -54,6 +76,8 @@ export const usePartyRoom = ({
   return {
     state,
     connected,
+    reactions,
+    react: (emoji: string) => send({ type: "react", emoji }),
     vote: (value: string) => send({ type: "vote", value }),
     reveal: () => send({ type: "reveal" }),
     reset: () => send({ type: "reset" }),

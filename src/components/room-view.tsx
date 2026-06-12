@@ -16,6 +16,9 @@ import { OnboardingHints } from "@/components/onboarding-hints"
 import { PixelPet } from "@/components/pixel-pet"
 import { PixelDealer } from "@/components/pixel-dealer"
 import { PixelWaiter } from "@/components/pixel-waiter"
+import { ReactionBar } from "@/components/reaction-bar"
+import { FloatingReactions } from "@/components/floating-reactions"
+import type { Reaction } from "@/hooks/use-party-room"
 import {
   isMuted,
   setMuted,
@@ -44,6 +47,8 @@ type Props = {
   copiedMode?: "code" | "link" | null
   onUpdateProfile?: (name: string, avatar: string) => void
   onRollSpeaker?: () => void
+  onReact?: (emoji: string) => void
+  reactions?: Reaction[]
 }
 
 export type Announcement = { emoji: string; title: string; sub: string }
@@ -321,6 +326,8 @@ export const RoomView = ({
   copiedMode,
   onUpdateProfile,
   onRollSpeaker,
+  onReact,
+  reactions,
 }: Props) => {
   const [theme, setTheme] = useState<Theme>("dark")
   const [flyingCard, setFlyingCard] = useState<{
@@ -830,10 +837,11 @@ export const RoomView = ({
       {/* Hand */}
       <div
         className={cn(
-          "flex-none border-t px-3 sm:px-6 pt-4 sm:pt-6 pb-3 sm:pb-4",
+          "relative flex-none border-t px-3 sm:px-6 pt-4 sm:pt-6 pb-3 sm:pb-4",
           s.hand,
         )}
       >
+        {onReact && <ReactionBar onReact={onReact} theme={theme} />}
         <div
           data-tour="hand"
           className="flex flex-col items-center gap-3 sm:gap-5"
@@ -893,6 +901,8 @@ export const RoomView = ({
       </div>
 
       <OnboardingHints isHost={isHost} />
+
+      {reactions && <FloatingReactions reactions={reactions} />}
 
       {/* Dealer announcements on mobile — the pixel dealer handles desktop */}
       <AnimatePresence>

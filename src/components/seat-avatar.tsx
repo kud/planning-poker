@@ -31,6 +31,7 @@ export const SeatAvatar = ({
 
   return (
     <motion.div
+      data-seat={participant.id}
       className="flex flex-col items-center gap-0.5"
       animate={{ scale: isSpeaker ? 1.18 : 1 }}
       transition={{ type: "spring", stiffness: 300, damping: 20 }}
