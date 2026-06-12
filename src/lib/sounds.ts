@@ -91,6 +91,28 @@ export const playConsensus = () => {
   tone(880, 0.45, { volume: 0.05, delay: 0.14 })
 }
 
+export const playEnterRoom = () => {
+  const audio = audioContext()
+  if (!audio) return
+  const fire = () => {
+    if (isMuted()) return
+    swish(0.18, 0.06)
+    tone(392, 0.3, { type: "triangle", volume: 0.05, delay: 0.12 })
+    tone(523.25, 0.5, { type: "triangle", volume: 0.05, delay: 0.28 })
+  }
+  if (audio.state === "suspended") {
+    const once = () => {
+      window.removeEventListener("pointerdown", once)
+      window.removeEventListener("keydown", once)
+      audio.resume().then(fire)
+    }
+    window.addEventListener("pointerdown", once, { once: true })
+    window.addEventListener("keydown", once, { once: true })
+    return
+  }
+  fire()
+}
+
 export const playNewRound = () => {
   swish(0.1, 0.05)
   swish(0.12, 0.06, 0.09)
@@ -106,51 +128,76 @@ export const playPurr = () => {
   const audio = audioContext()
   if (!audio || isMuted()) return
   const start = audio.currentTime
-  const duration = 2.7
+  const duration = 2.9
 
+  // Pink-ish noise — warmer than white, without brown noise's seismic rumble.
   const length = Math.ceil(audio.sampleRate * duration)
   const buffer = audio.createBuffer(1, length, audio.sampleRate)
   const data = buffer.getChannelData(0)
-  for (let i = 0; i < length; i++) data[i] = Math.random() * 2 - 1
+  let smoothed = 0
+  for (let i = 0; i < length; i++) {
+    const white = Math.random() * 2 - 1
+    smoothed = 0.85 * smoothed + 0.15 * white
+    data[i] = smoothed * 1.4 + white * 0.12
+  }
   const source = audio.createBufferSource()
   source.buffer = buffer
 
+  const highpass = audio.createBiquadFilter()
+  highpass.type = "highpass"
+  highpass.frequency.value = 62
+  highpass.Q.value = 0.6
+
   const lowpass = audio.createBiquadFilter()
   lowpass.type = "lowpass"
-  lowpass.frequency.value = 300
-  lowpass.Q.value = 0.5
+  lowpass.frequency.value = 240
+  lowpass.Q.value = 0.4
 
   const throat = audio.createBiquadFilter()
   throat.type = "peaking"
-  throat.frequency.value = 120
-  throat.Q.value = 1.4
-  throat.gain.value = 8
+  throat.frequency.value = 95
+  throat.Q.value = 0.8
+  throat.gain.value = 6
 
   const pulse = audio.createGain()
   pulse.gain.value = 0.72
   const lfo = audio.createOscillator()
   const lfoDepth = audio.createGain()
-  lfo.frequency.setValueAtTime(26, start)
-  lfo.frequency.linearRampToValueAtTime(29, start + duration / 2)
-  lfo.frequency.linearRampToValueAtTime(25, start + duration)
-  lfoDepth.gain.value = 0.16
+  lfoDepth.gain.value = 0.28
   lfo.connect(lfoDepth)
   lfoDepth.connect(pulse.gain)
 
+  const bodyGain = audio.createGain()
+  bodyGain.gain.value = 0.22
+  const bodies = [118, 123].map((frequency) => {
+    const osc = audio.createOscillator()
+    osc.type = "sine"
+    osc.frequency.value = frequency
+    osc.connect(bodyGain)
+    return osc
+  })
+  bodyGain.connect(pulse)
+
+  // Asymmetric breathing: a quicker, brighter inhale swell, then a longer,
+  // darker exhale fade — two cycles, à la Purrli.
   const envelope = audio.createGain()
-  envelope.gain.setValueAtTime(0, start)
-  envelope.gain.linearRampToValueAtTime(0.28, start + 0.2)
-  envelope.gain.setValueAtTime(0.28, start + duration - 0.5)
-  envelope.gain.linearRampToValueAtTime(0.0001, start + duration)
+  envelope.gain.setValueAtTime(0.02, start)
+  const INHALE = 0.5
+  const EXHALE = 0.8
+  let t = start
+  for (let i = 0; i < 2; i++) {
+    envelope.gain.linearRampToValueAtTime(0.6, t + INHALE)
+    envelope.gain.linearRampToValueAtTime(0.1, t + INHALE + EXHALE)
+    lowpass.frequency.setValueAtTime(280, t)
+    lowpass.frequency.linearRampToValueAtTime(180, t + INHALE + EXHALE)
+    lfo.frequency.setValueAtTime(27, t)
+    lfo.frequency.linearRampToValueAtTime(23, t + INHALE + EXHALE)
+    t += INHALE + EXHALE + 0.05
+  }
+  envelope.gain.linearRampToValueAtTime(0.0001, t + 0.15)
 
-  const breath = audio.createOscillator()
-  const breathDepth = audio.createGain()
-  breath.frequency.value = 0.9
-  breathDepth.gain.value = 0.24
-  breath.connect(breathDepth)
-  breathDepth.connect(envelope.gain)
-
-  source.connect(lowpass)
+  source.connect(highpass)
+  highpass.connect(lowpass)
   lowpass.connect(throat)
   throat.connect(pulse)
   pulse.connect(envelope)
@@ -158,8 +205,20 @@ export const playPurr = () => {
   source.start(start)
   lfo.start(start)
   lfo.stop(start + duration)
-  breath.start(start)
-  breath.stop(start + duration)
+  bodies.forEach((osc) => {
+    osc.start(start)
+    osc.stop(start + duration)
+  })
+}
+
+export const playClink = () => {
+  tone(2093, 0.09, { volume: 0.04 })
+  tone(2637, 0.14, { volume: 0.035, delay: 0.07 })
+}
+
+export const playAhem = () => {
+  tone(170, 0.07, { type: "triangle", volume: 0.05 })
+  tone(140, 0.12, { type: "triangle", volume: 0.045, delay: 0.1 })
 }
 
 export const playScamper = () => {

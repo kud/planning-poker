@@ -1,7 +1,52 @@
 "use client"
 
+import { useRef, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import type { Announcement } from "@/components/room-view"
+import { playAhem } from "@/lib/sounds"
+
+const SMALL_TALK: Announcement[] = [
+  {
+    emoji: "🎩",
+    title: "House rules",
+    sub: "Whatever happens at this table stays in the retro.",
+  },
+  {
+    emoji: "🃏",
+    title: "Pro tip",
+    sub: "A 13 is just a 21 that hasn't met the backend yet.",
+  },
+  {
+    emoji: "🤫",
+    title: "Between us",
+    sub: "The coffee card never means coffee. It means the meeting ran long.",
+  },
+  {
+    emoji: "♠️",
+    title: "I've seen things",
+    sub: "Teams estimating in hours. We don't speak of them.",
+  },
+  {
+    emoji: "📐",
+    title: "Fibonacci, naturally",
+    sub: "Uncertainty grows faster than your sprint does.",
+  },
+  {
+    emoji: "🐈",
+    title: "Mind the cat",
+    sub: "Judging your velocity. Quietly.",
+  },
+  {
+    emoji: "🎲",
+    title: "Fair warning",
+    sub: "You can't bluff at planning poker. People still try.",
+  },
+  {
+    emoji: "🤵",
+    title: "At your service",
+    sub: "Cards shuffled, table clean, opinions ready.",
+  },
+]
 
 const PIXEL = 6
 
@@ -61,50 +106,75 @@ export const PixelDealer = ({
   announcement,
 }: {
   announcement: Announcement | null
-}) => (
-  <div className="absolute -left-[19%] -bottom-[4%] z-10 flex flex-col items-start pointer-events-none">
-    <AnimatePresence>
-      {announcement && (
-        <motion.div
-          initial={{ opacity: 0, y: 10, scale: 0.85 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: 6, scale: 0.9 }}
-          transition={{ type: "spring", stiffness: 340, damping: 24 }}
-          className="absolute bottom-full mb-3 w-72"
-        >
-          <div className="rounded-2xl border border-yellow-500/40 bg-[#10131f]/95 backdrop-blur-md px-4 py-3 shadow-[0_10px_32px_rgba(0,0,0,0.5),0_0_18px_rgba(234,179,8,0.18)]">
-            <div className="flex items-start gap-2.5">
-              <span className="text-2xl leading-none">
-                {announcement.emoji}
-              </span>
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-yellow-100 leading-snug">
-                  {announcement.title}
-                </p>
-                <p className="text-xs text-yellow-200/60 italic leading-snug mt-1">
-                  {announcement.sub}
-                </p>
+}) => <PixelDealerInner announcement={announcement} />
+
+const PixelDealerInner = ({
+  announcement,
+}: {
+  announcement: Announcement | null
+}) => {
+  const [chat, setChat] = useState<Announcement | null>(null)
+  const lastQuip = useRef(-1)
+  const chatTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const speak = () => {
+    playAhem()
+    let index = Math.floor(Math.random() * SMALL_TALK.length)
+    if (index === lastQuip.current) index = (index + 1) % SMALL_TALK.length
+    lastQuip.current = index
+    setChat(SMALL_TALK[index])
+    if (chatTimer.current) clearTimeout(chatTimer.current)
+    chatTimer.current = setTimeout(() => setChat(null), 3500)
+  }
+
+  const bubble = announcement ?? chat
+
+  return (
+    <div className="absolute -left-[19%] -bottom-[4%] z-10 flex flex-col items-start pointer-events-none">
+      <AnimatePresence mode="wait">
+        {bubble && (
+          <motion.div
+            key={bubble.title}
+            initial={{ opacity: 0, y: 10, scale: 0.85 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 6, scale: 0.9 }}
+            transition={{ type: "spring", stiffness: 340, damping: 24 }}
+            className="absolute bottom-full mb-3 w-80"
+          >
+            <div className="rounded-2xl border border-yellow-500/40 bg-[#10131f]/95 backdrop-blur-md px-5 py-3.5 shadow-[0_10px_32px_rgba(0,0,0,0.5),0_0_18px_rgba(234,179,8,0.18)]">
+              <div className="flex items-start gap-3">
+                <span className="text-3xl leading-none">{bubble.emoji}</span>
+                <div className="min-w-0">
+                  <p className="text-base font-semibold text-yellow-100 leading-snug">
+                    {bubble.title}
+                  </p>
+                  <p className="text-sm text-yellow-200/70 italic leading-snug mt-1">
+                    {bubble.sub}
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
-          <div className="absolute -bottom-1 left-7 w-2.5 h-2.5 rotate-45 border-b border-r border-yellow-500/40 bg-[#10131f]" />
-        </motion.div>
-      )}
-    </AnimatePresence>
-    <motion.div
-      animate={
-        announcement
-          ? { rotate: [0, 7, 7, 0], y: 0 }
-          : { y: [0, -1.5, 0], rotate: 0 }
-      }
-      transition={
-        announcement
-          ? { duration: 1.1, times: [0, 0.25, 0.7, 1], ease: "easeInOut" }
-          : { duration: 3, repeat: Infinity, ease: "easeInOut" }
-      }
-      style={{ transformOrigin: "bottom center" }}
-    >
-      <DealerSprite />
-    </motion.div>
-  </div>
-)
+            <div className="absolute -bottom-1 left-7 w-2.5 h-2.5 rotate-45 border-b border-r border-yellow-500/40 bg-[#10131f]" />
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <motion.div
+        onClick={speak}
+        className="pointer-events-auto cursor-pointer"
+        animate={
+          bubble
+            ? { rotate: [0, 7, 7, 0], y: 0 }
+            : { y: [0, -1.5, 0], rotate: 0 }
+        }
+        transition={
+          bubble
+            ? { duration: 1.1, times: [0, 0.25, 0.7, 1], ease: "easeInOut" }
+            : { duration: 3, repeat: Infinity, ease: "easeInOut" }
+        }
+        style={{ transformOrigin: "bottom center" }}
+      >
+        <DealerSprite />
+      </motion.div>
+    </div>
+  )
+}

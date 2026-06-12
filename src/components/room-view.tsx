@@ -15,6 +15,7 @@ import { SettingsDialog } from "@/components/settings-dialog"
 import { OnboardingHints } from "@/components/onboarding-hints"
 import { PixelPet } from "@/components/pixel-pet"
 import { PixelDealer } from "@/components/pixel-dealer"
+import { PixelWaiter } from "@/components/pixel-waiter"
 import {
   isMuted,
   setMuted,
@@ -23,6 +24,7 @@ import {
   playConsensus,
   playDice,
   playNewRound,
+  playEnterRoom,
 } from "@/lib/sounds"
 import { saveSettings } from "@/lib/settings"
 
@@ -237,24 +239,16 @@ const ShareMenu = ({
 
 const RoundControls = ({
   state,
-  isHost,
   voteCount,
   allVoted,
   total,
   roomId,
-  onReveal,
-  onReset,
-  onRollSpeaker,
 }: {
   state: RoomState
-  isHost: boolean
   voteCount: number
   allVoted: boolean
   total: number
   roomId?: string
-  onReveal?: () => void
-  onReset?: () => void
-  onRollSpeaker?: () => void
 }) => {
   const pending = Object.values(state.participants).filter(
     (p) => p.vote === null,
@@ -293,19 +287,6 @@ const RoundControls = ({
               </span>
             </div>
           )}
-          {isHost && (
-            <Button
-              size="sm"
-              data-tour="reveal"
-              onClick={onReveal}
-              className={cn(
-                "bg-red-700 hover:bg-red-600 text-white border border-yellow-500/40 shadow-[0_0_20px_rgba(185,28,28,0.6),inset_0_1px_0_rgba(255,220,100,0.2)] font-semibold tracking-wide",
-                voteCount === 0 && "opacity-40 pointer-events-none",
-              )}
-            >
-              Reveal cards
-            </Button>
-          )}
         </motion.div>
       ) : (
         <motion.div
@@ -320,26 +301,6 @@ const RoundControls = ({
             participants={state.participants}
             revealed={state.revealed}
           />
-          {isHost && (
-            <div className="flex items-center gap-2 flex-none">
-              {onRollSpeaker && total > 1 && (
-                <Button
-                  size="sm"
-                  onClick={onRollSpeaker}
-                  className="border border-amber-400/30 bg-amber-500/15 text-amber-100 hover:bg-amber-500/25"
-                >
-                  🎲 Speaker
-                </Button>
-              )}
-              <Button
-                size="sm"
-                onClick={onReset}
-                className="border-white/20 bg-white/10 text-white hover:bg-white/20"
-              >
-                New round
-              </Button>
-            </div>
-          )}
         </motion.div>
       )}
     </AnimatePresence>
@@ -373,10 +334,11 @@ export const RoomView = ({
   const [announcement, setAnnouncement] = useState<Announcement | null>(null)
   const [rollingDice, setRollingDice] = useState(false)
   const [muted, setMutedState] = useState(false)
+  const [coffeeRun, setCoffeeRun] = useState(false)
 
   useEffect(() => {
     setMutedState(isMuted())
-    playNewRound()
+    playEnterRoom()
   }, [])
 
   const toggleMuted = () => {
@@ -398,13 +360,14 @@ export const RoomView = ({
     if (was === state.revealed) return
     if (state.revealed) playReveal()
     else playNewRound()
+    if (state.revealed && latestVotes.current.includes("☕")) setCoffeeRun(true)
     setAnnouncement(
       state.revealed
         ? revealQuip(latestVotes.current)
         : {
             emoji: "🤵",
             title: "New round",
-            sub: "Place your votes, ladies and gentlemen",
+            sub: "Place your votes, everyone",
           },
     )
     const timer = setTimeout(() => setAnnouncement(null), 3000)
@@ -469,11 +432,19 @@ export const RoomView = ({
       const anyVotes = Object.values(state.participants).some(
         (p) => p.vote !== null,
       )
-      const reveal = key === "r" || e.key === " "
-      const nextRound = key === "n" || e.key === " "
       if (e.key === " ") e.preventDefault()
-      if (isHost && reveal && !state.revealed && anyVotes) onReveal?.()
-      else if (isHost && nextRound && state.revealed) onReset?.()
+      if (!isHost) return
+      if (!state.revealed) {
+        if ((key === "r" || e.key === " ") && anyVotes) onReveal?.()
+        return
+      }
+      const total = Object.keys(state.participants).length
+      const allSpoken = state.spoken.length >= total
+      if (key === "n") onReset?.()
+      else if (e.key === " ") {
+        if (total > 1 && !allSpoken) onRollSpeaker?.()
+        else onReset?.()
+      }
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
@@ -553,6 +524,11 @@ export const RoomView = ({
                 ? "All voted ✓"
                 : `${voteCount} / ${participants.length} voted`}
           </span>
+          {isHost && (
+            <span className="text-[11px] sm:text-xs px-2 py-0.5 rounded-full border border-yellow-500/40 bg-yellow-500/10 text-yellow-200/90 whitespace-nowrap">
+              👑 Host
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-1.5 sm:gap-2">
@@ -614,9 +590,62 @@ export const RoomView = ({
         </div>
       </header>
 
+      {/* Host actions — kept off the felt so cards never cover them */}
+      {isHost && (
+        <div
+          className={`flex-none border-b ${s.header} backdrop-blur-md px-3 py-2 flex items-center justify-center gap-2.5 z-10`}
+        >
+          {!state.revealed ? (
+            <Button
+              size="sm"
+              data-tour="reveal"
+              onClick={onReveal}
+              className={cn(
+                "bg-red-700 hover:bg-red-600 text-white border border-yellow-500/40 shadow-[0_0_20px_rgba(185,28,28,0.5),inset_0_1px_0_rgba(255,220,100,0.2)] font-semibold tracking-wide",
+                voteCount === 0 && "opacity-40 pointer-events-none",
+              )}
+            >
+              Reveal cards
+            </Button>
+          ) : (
+            <>
+              {onRollSpeaker &&
+                participants.length > 1 &&
+                state.spoken.length < participants.length && (
+                  <Button
+                    size="sm"
+                    onClick={onRollSpeaker}
+                    className="border border-amber-400/30 bg-amber-500/15 text-amber-100 hover:bg-amber-500/25"
+                  >
+                    🎲{" "}
+                    {state.spoken.length === 0
+                      ? "First speaker"
+                      : "Next speaker"}
+                  </Button>
+                )}
+              <Button
+                size="sm"
+                onClick={onReset}
+                className="border-white/20 bg-white/10 text-white hover:bg-white/20"
+              >
+                New round
+              </Button>
+              {participants.length > 1 && state.spoken.length > 0 && (
+                <span className="text-[10px] text-white/40 tracking-wide uppercase">
+                  {state.spoken.length >= participants.length
+                    ? "Everyone spoke 🎉"
+                    : `${state.spoken.length} of ${participants.length} spoke`}
+                </span>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
       {/* Table area */}
       <main className="flex-1 relative flex items-center justify-center overflow-hidden">
         <PixelPet />
+        <PixelWaiter active={coffeeRun} onDone={() => setCoffeeRun(false)} />
         {/* Mobile — roster grid, no table */}
         <div className="md:hidden w-full max-h-full overflow-y-auto px-4 py-5 flex flex-col items-center gap-6">
           <div
@@ -645,6 +674,7 @@ export const RoomView = ({
                     participant={participant}
                     theme={theme}
                     isSpeaker={participant.id === state.speaker}
+                    hasSpoken={state.spoken.includes(participant.id)}
                   />
                   {participant.vote !== null ? (
                     <TableCard
@@ -673,14 +703,10 @@ export const RoomView = ({
           >
             <RoundControls
               state={state}
-              isHost={isHost}
               voteCount={voteCount}
               allVoted={allVoted}
               total={participants.length}
               roomId={roomId}
-              onReveal={onReveal}
-              onReset={onReset}
-              onRollSpeaker={onRollSpeaker}
             />
           </div>
         </div>
@@ -727,18 +753,14 @@ export const RoomView = ({
             </div>
           </div>
 
-          {/* Centre content */}
-          <div className="absolute inset-0 flex items-center justify-center px-[12%]">
+          {/* Centre content — above the cards so stats are never covered */}
+          <div className="absolute inset-0 z-10 flex items-center justify-center px-[12%] pointer-events-none [&_*]:pointer-events-auto">
             <RoundControls
               state={state}
-              isHost={isHost}
               voteCount={voteCount}
               allVoted={allVoted}
               total={participants.length}
               roomId={roomId}
-              onReveal={onReveal}
-              onReset={onReset}
-              onRollSpeaker={onRollSpeaker}
             />
           </div>
 
@@ -786,6 +808,7 @@ export const RoomView = ({
                   participant={participant}
                   theme={theme}
                   isSpeaker={participant.id === state.speaker}
+                  hasSpoken={state.spoken.includes(participant.id)}
                 />
               </motion.div>
             ))}
@@ -815,7 +838,7 @@ export const RoomView = ({
             >
               {isHost
                 ? state.revealed
-                  ? "space — new round"
+                  ? "space — next speaker, then new round"
                   : "1–9 vote · space reveal"
                 : state.revealed
                   ? ""
@@ -895,7 +918,7 @@ export const RoomView = ({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -12, scale: 0.9 }}
             transition={{ type: "spring", stiffness: 320, damping: 24 }}
-            className="fixed top-14 sm:top-16 inset-x-0 z-30 flex justify-center pointer-events-none"
+            className="absolute top-24 sm:top-28 inset-x-0 z-30 flex justify-center pointer-events-none"
           >
             <div className="flex items-center gap-2.5 rounded-full border border-amber-400/40 bg-[#10131f]/90 backdrop-blur-md px-4 py-2 shadow-[0_8px_30px_rgba(0,0,0,0.4)]">
               {rollingDice ? (
@@ -913,6 +936,12 @@ export const RoomView = ({
                 {rollingDice
                   ? "Rolling…"
                   : `${state.participants[state.speaker].name}, the floor is yours`}
+                {!rollingDice && state.spoken.length > 0 && (
+                  <span className="text-amber-200/50 ml-2 text-xs">
+                    {state.spoken.length}/
+                    {Object.keys(state.participants).length}
+                  </span>
+                )}
               </span>
             </div>
           </motion.div>

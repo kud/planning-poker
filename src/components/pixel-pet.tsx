@@ -8,7 +8,7 @@ const PIXEL = 3
 const WALK_SPEED = 6
 const FLEE_SPEED = 30
 const SNIFF_SECONDS = 1.7
-const PURR_SECONDS = 2.7
+const PURR_SECONDS = 2.9
 const FRAME_MS = 150
 const FLEE_FRAME_MS = 80
 

@@ -410,7 +410,7 @@ export default function HomePage() {
         <div className="relative flex justify-center lg:justify-end">
           {/* Doodle arrow pointing at the form */}
           <div
-            className="absolute hidden lg:block right-[24.5rem] top-1/4 w-44 pointer-events-none select-none"
+            className="absolute hidden lg:block right-[24.5rem] top-20 w-44 pointer-events-none select-none"
             aria-hidden
           >
             <p className="font-serif italic text-slate-300/90 text-lg -rotate-6 mb-1">

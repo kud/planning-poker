@@ -192,7 +192,21 @@ export default class PokerRoom implements Party.Server {
           (id) => !fresh.includes(id) && id !== this.state.speaker,
         )
         if (candidates.length === 0) break
-        const picked = candidates[Math.floor(Math.random() * candidates.length)]
+        const numericVote = (id: string) =>
+          Number(this.state.participants[id]?.vote)
+        const numeric = candidates.filter(
+          (id) => !Number.isNaN(numericVote(id)),
+        )
+        const picked =
+          numeric.length > 0 && fresh.length === 0
+            ? numeric.reduce((a, b) =>
+                numericVote(b) > numericVote(a) ? b : a,
+              )
+            : numeric.length > 0 && fresh.length === 1
+              ? numeric.reduce((a, b) =>
+                  numericVote(b) < numericVote(a) ? b : a,
+                )
+              : candidates[Math.floor(Math.random() * candidates.length)]
         this.state = {
           ...this.state,
           speaker: picked,
