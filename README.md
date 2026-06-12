@@ -15,6 +15,10 @@
 
 [Features](#-features) • [Quick Start](#-quick-start) • [How It Works](#-how-it-works) • [Development](#-development)
 
+&nbsp;
+
+![Planning Poker — eight players around the table, all voted, ready to reveal](public/screenshot.png)
+
 </div>
 
 ---
@@ -23,12 +27,16 @@
 
 - 🔗 **Real-time rooms** — a tiny [PartyKit](https://www.partykit.io/) room server on Cloudflare's edge keeps everyone in sync over WebSockets; rooms survive host refreshes and reconnects
 - 🎟 **Friendly room codes** — six-character codes (e.g. `PKD8QC`) that are easy to read out loud or paste in chat
-- 🃏 **Multiple deck presets** — Fibonacci (0–21 + ? + ☕), Numeric (t-shirt sizes as numbers), T-shirt (XS–XXL), or a fully custom deck
-- 🎭 **Pixel-art avatars** — DiceBear-generated identicons, selectable on join and changeable at any point mid-session
-- 🎰 **Casino-style reveal** — votes stay hidden until the host dramatically flips them all at once
-- 🎉 **Consensus confetti** — canvas-confetti fires automatically when every participant votes the same value
+- 🃏 **Multiple deck presets** — Fibonacci (0–21 + ? + ☕), Numeric, T-shirt (XS–XXL), or a fully custom deck; your favourite is remembered for next time
+- 🎰 **Casino-style reveal** — votes stay face-down on the felt until the host flips them all at once
+- 🎤 **Speaker ritual** — after the reveal, pass the mic: highest vote explains first, lowest second, then the rest; <kbd>space</kbd> drives the whole flow
+- ⌨️ **Hotkeys** — <kbd>1–9</kbd> to vote, <kbd>space</kbd> to reveal / next speaker / new round
+- 🤵 **A table with a soul** — a pixel croupier announces rounds and commentates results, a waiter delivers coffee when someone plays ☕, and a cat wanders by (it purrs if you're lucky)
+- 🔊 **Subtle sound design** — synthesized card swishes, reveal flips, consensus chimes; one-click mute, persisted
+- 🎭 **Pixel-art avatars** — DiceBear-generated, selectable on join and changeable mid-session
+- 🎉 **Consensus confetti** — fires automatically when everyone votes the same value
+- 📱 **Mobile-friendly & installable** — a roster layout on phones and a PWA manifest for Add-to-Home-Screen
 - 🌗 **Dark & light theme** — toggled with a single click, preference persisted across sessions
-- 💾 **Persistent settings** — name and avatar seed saved to `localStorage` so returning users skip the setup screen
 
 ---
 
@@ -121,14 +129,15 @@ src/
 
 ### Scripts
 
-| Script                 | Description                            |
-| ---------------------- | -------------------------------------- |
-| `npm run dev`          | Start Next.js dev server with HMR      |
-| `npm run party:dev`    | Start the PartyKit room server locally |
-| `npm run party:deploy` | Deploy the room server to PartyKit     |
-| `npm run build`        | Production build                       |
-| `npm run start`        | Serve the production build             |
-| `npm run lint`         | Run ESLint                             |
+| Script                 | Description                                                       |
+| ---------------------- | ----------------------------------------------------------------- |
+| `npm run dev`          | Start Next.js dev server with HMR                                 |
+| `npm run party:dev`    | Start the PartyKit room server locally                            |
+| `npm run party:deploy` | Deploy the room server to PartyKit                                |
+| `npm run crew -- CODE` | Inject auto-voting fake users for testing (`--count N`, `--prod`) |
+| `npm run build`        | Production build                                                  |
+| `npm run start`        | Serve the production build                                        |
+| `npm run lint`         | Run ESLint                                                        |
 
 ### Configuration
 

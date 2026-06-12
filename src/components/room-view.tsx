@@ -525,7 +525,14 @@ export const RoomView = ({
                 : `${voteCount} / ${participants.length} voted`}
           </span>
           {isHost && (
-            <span className="text-[11px] sm:text-xs px-2 py-0.5 rounded-full border border-yellow-500/40 bg-yellow-500/10 text-yellow-200/90 whitespace-nowrap">
+            <span
+              className={cn(
+                "text-[11px] sm:text-xs px-2 py-0.5 rounded-full border whitespace-nowrap",
+                theme === "dark"
+                  ? "border-yellow-500/40 bg-yellow-500/10 text-yellow-200/90"
+                  : "border-yellow-600/40 bg-yellow-100 text-yellow-800",
+              )}
+            >
               👑 Host
             </span>
           )}
@@ -585,7 +592,11 @@ export const RoomView = ({
             />
           )}
           {isHost && onSetDeck && (
-            <DeckSelector currentDeck={state.deck} onApply={onSetDeck} />
+            <DeckSelector
+              currentDeck={state.deck}
+              onApply={onSetDeck}
+              triggerClassName={`border text-xs ${s.themeBtn}`}
+            />
           )}
         </div>
       </header>
@@ -918,7 +929,7 @@ export const RoomView = ({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -12, scale: 0.9 }}
             transition={{ type: "spring", stiffness: 320, damping: 24 }}
-            className="absolute top-24 sm:top-28 inset-x-0 z-30 flex justify-center pointer-events-none"
+            className="absolute top-28 inset-x-0 z-30 hidden sm:flex justify-center pointer-events-none"
           >
             <div className="flex items-center gap-2.5 rounded-full border border-amber-400/40 bg-[#10131f]/90 backdrop-blur-md px-4 py-2 shadow-[0_8px_30px_rgba(0,0,0,0.4)]">
               {rollingDice ? (

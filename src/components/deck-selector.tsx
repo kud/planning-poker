@@ -22,6 +22,7 @@ import { Card, Deck, DeckPreset } from "@/lib/types"
 type Props = {
   currentDeck: Deck
   onApply: (deck: Deck) => void
+  triggerClassName?: string
 }
 
 const CardPreview = ({ cards }: { cards: Card[] }) => (
@@ -42,7 +43,11 @@ const CardPreview = ({ cards }: { cards: Card[] }) => (
   </div>
 )
 
-export const DeckSelector = ({ currentDeck, onApply }: Props) => {
+export const DeckSelector = ({
+  currentDeck,
+  onApply,
+  triggerClassName,
+}: Props) => {
   const [open, setOpen] = useState(false)
   const [preset, setPreset] = useState<DeckPreset>(currentDeck.preset)
   const [customInput, setCustomInput] = useState("")
@@ -70,7 +75,10 @@ export const DeckSelector = ({ currentDeck, onApply }: Props) => {
           <Button
             variant="ghost"
             size="sm"
-            className="border border-white/15 text-slate-300 hover:bg-white/8 hover:text-white"
+            className={
+              triggerClassName ??
+              "border border-white/15 text-slate-300 hover:bg-white/8 hover:text-white"
+            }
           />
         }
       >
