@@ -1,0 +1,5 @@
+{
+  "name": "planning-poker",
+  "main": "party/index.ts",
+  "compatibilityDate": "2026-06-12"
+}

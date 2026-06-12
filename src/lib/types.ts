@@ -21,14 +21,15 @@ export type Participant = {
 }
 
 export type RoomState = {
-  story: string
   deck: Deck
   participants: Record<string, Participant>
   revealed: boolean
 }
 
 export type Message =
-  | { type: "join"; name: string; avatar: string }
   | { type: "vote"; value: CardValue }
   | { type: "update-profile"; name: string; avatar: string }
   | { type: "state"; state: RoomState }
+  | { type: "reveal" }
+  | { type: "reset" }
+  | { type: "set-deck"; deck: Deck }

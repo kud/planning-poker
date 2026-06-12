@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { randomSeed } from "@/lib/avatar"
 import { loadSettings, saveSettings } from "@/lib/settings"
+import { generateRoomCode, normaliseRoomCode } from "@/lib/room-code"
 import { motion } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -82,17 +83,20 @@ const LandingForm = () => {
     e.preventDefault()
     if (!name.trim()) return
     saveSettings({ name: name.trim(), avatar })
+    const roomId = generateRoomCode()
+    localStorage.setItem(`poker-host-${roomId}`, crypto.randomUUID())
     router.push(
-      `/host?name=${encodeURIComponent(name.trim())}&avatar=${encodeURIComponent(avatar)}`,
+      `/room/${roomId}?name=${encodeURIComponent(name.trim())}&avatar=${encodeURIComponent(avatar)}`,
     )
   }
 
   const handleJoin = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!name.trim() || !roomId.trim()) return
+    const code = normaliseRoomCode(roomId)
+    if (!name.trim() || !code) return
     saveSettings({ name: name.trim(), avatar })
     router.push(
-      `/room/${encodeURIComponent(roomId.trim())}?name=${encodeURIComponent(name.trim())}&avatar=${encodeURIComponent(avatar)}`,
+      `/room/${encodeURIComponent(code)}?name=${encodeURIComponent(name.trim())}&avatar=${encodeURIComponent(avatar)}`,
     )
   }
 
@@ -179,9 +183,9 @@ const LandingForm = () => {
                 autoFocus
               />
               <Input
-                placeholder="Room ID"
+                placeholder="Room code"
                 value={roomId}
-                onChange={(e) => setRoomId(e.target.value)}
+                onChange={(e) => setRoomId(e.target.value.toUpperCase())}
                 className="font-mono"
               />
               <AvatarPicker
@@ -205,7 +209,7 @@ const LandingForm = () => {
         </motion.div>
 
         <p className="text-xs text-center text-muted-foreground">
-          Peer-to-peer · no server · no account
+          Free · real-time · no account
         </p>
       </div>
     </motion.div>

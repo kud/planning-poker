@@ -11,7 +11,7 @@
 [![React](https://img.shields.io/badge/React_19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev/)
 [![MIT](https://img.shields.io/badge/MIT-22C55E?style=flat-square)](LICENSE)
 
-**Estimate user stories together in real time — peer-to-peer, no server, no account required.**
+**Estimate user stories together in real time — free, no account required.**
 
 [Features](#-features) • [Quick Start](#-quick-start) • [How It Works](#-how-it-works) • [Development](#-development)
 
@@ -21,7 +21,8 @@
 
 ## 🌟 Features
 
-- 🔗 **Serverless & private** — rooms run entirely over WebRTC (PeerJS); no data ever touches a server or database
+- 🔗 **Real-time rooms** — a tiny [PartyKit](https://www.partykit.io/) room server on Cloudflare's edge keeps everyone in sync over WebSockets; rooms survive host refreshes and reconnects
+- 🎟 **Friendly room codes** — six-character codes (e.g. `PKD8QC`) that are easy to read out loud or paste in chat
 - 🃏 **Multiple deck presets** — Fibonacci (0–21 + ? + ☕), Numeric (t-shirt sizes as numbers), T-shirt (XS–XXL), or a fully custom deck
 - 🎭 **Pixel-art avatars** — DiceBear-generated identicons, selectable on join and changeable at any point mid-session
 - 🎰 **Casino-style reveal** — votes stay hidden until the host dramatically flips them all at once
@@ -39,13 +40,14 @@ git clone https://github.com/kud/planning-poker.git
 cd planning-poker
 npm install
 
-# Start the dev server
-npm run dev
+# Start the PartyKit room server and the Next.js dev server
+npm run party:dev   # terminal 1 — ws://127.0.0.1:1999
+npm run dev         # terminal 2 — http://localhost:3000
 ```
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-1. Click **Host a room** — a unique room code and shareable link are generated instantly.
+1. Click **Create room** — a six-character room code and shareable link are generated instantly.
 2. Share the link (or code) with your team.
 3. Each guest opens the link, picks a name and avatar, and joins.
 4. Everyone votes; the host clicks **Reveal** to flip all cards simultaneously.
@@ -56,24 +58,23 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 ## 🧩 How It Works
 
 ```
-Host browser  ──────────────────────────────────────────────────────────┐
-              PeerJS (WebRTC DataChannel)                                │
-Guest 1 ──────────────────────────────────────────────────────────────► │
-Guest 2 ──────────────────────────────────────────────────────────────► │ room state
-Guest 3 ──────────────────────────────────────────────────────────────► │
-                                                                         └── kept in-memory only
+Host    ◄──────────────┐
+                       │ WebSockets
+Guest 1 ◄──────────────┤
+Guest 2 ◄──────────────┼──► PartyKit room server (Cloudflare edge)
+Guest 3 ◄──────────────┘    └── authoritative room state
 ```
 
-The host's browser acts as the hub. Guests connect directly to the host via WebRTC data channels brokered by the public PeerJS signalling server. Once connected, all message passing is peer-to-peer. There is no backend, no database, and no persistent state.
+Each room is a stateful [PartyKit](https://www.partykit.io/) server running on Cloudflare's edge (free tier). Every participant — host included — connects over a WebSocket; the server holds the authoritative room state and broadcasts every change to all connections. The deck and host identity are persisted in room storage, so the room survives refreshes and reconnects.
+
+Hosting is a capability, not a page: creating a room generates a secret kept in `localStorage`, and whoever presents it to the room server gets the host controls. No accounts, no database.
 
 ### Routes
 
-| Route        | Purpose                                  |
-| ------------ | ---------------------------------------- |
-| `/`          | Landing page — create or join a room     |
-| `/host`      | Host lobby — configure deck, share code  |
-| `/room/[id]` | Guest view — vote and watch results      |
-| `/demo`      | Solo demo — try the UI without any peers |
+| Route        | Purpose                              |
+| ------------ | ------------------------------------ |
+| `/`          | Landing page — create or join a room |
+| `/room/[id]` | The room — vote and watch results    |
 
 ### Deck Presets
 
@@ -91,12 +92,12 @@ The host's browser acts as the hub. Guests connect directly to the host via WebR
 ### Project structure
 
 ```
+party/
+└── index.ts              # PartyKit room server — authoritative state
 src/
 ├── app/
 │   ├── page.tsx          # Landing — create or join
-│   ├── host/             # Host room setup
-│   ├── room/[id]/        # Guest room view
-│   └── demo/             # Demo mode
+│   └── room/[id]/        # The room view
 ├── components/
 │   ├── room-view.tsx     # Core voting UI
 │   ├── participant-card.tsx
@@ -107,10 +108,11 @@ src/
 │   ├── vote-summary.tsx
 │   └── ui/               # Base UI primitives
 ├── hooks/
-│   ├── use-peer-host.ts  # Host WebRTC logic
-│   └── use-peer-guest.ts # Guest WebRTC logic
+│   ├── use-party-room.ts # WebSocket connection & room actions
+│   └── use-share-room.ts # Copy room code / link
 └── lib/
     ├── decks.ts          # Deck presets & parser
+    ├── room-code.ts      # Room code generation
     ├── types.ts          # Shared TypeScript types
     ├── settings.ts       # localStorage persistence
     ├── avatar.ts         # DiceBear helpers
@@ -119,21 +121,20 @@ src/
 
 ### Scripts
 
-| Script          | Description                       |
-| --------------- | --------------------------------- |
-| `npm run dev`   | Start Next.js dev server with HMR |
-| `npm run build` | Production build                  |
-| `npm run start` | Serve the production build        |
-| `npm run lint`  | Run ESLint                        |
+| Script                 | Description                            |
+| ---------------------- | -------------------------------------- |
+| `npm run dev`          | Start Next.js dev server with HMR      |
+| `npm run party:dev`    | Start the PartyKit room server locally |
+| `npm run party:deploy` | Deploy the room server to PartyKit     |
+| `npm run build`        | Production build                       |
+| `npm run start`        | Serve the production build             |
+| `npm run lint`         | Run ESLint                             |
 
-### Clone → install → run
+### Configuration
 
-```bash
-git clone https://github.com/kud/planning-poker.git
-cd planning-poker
-npm install
-npm run dev
-```
+The client connects to `NEXT_PUBLIC_PARTYKIT_HOST` when set, and falls back to
+`127.0.0.1:1999` in development and `planning-poker.kud.partykit.dev` in
+production builds.
 
 ---
 
@@ -143,14 +144,12 @@ npm run dev
 | ------------------------------------------------------------ | ---------------------------------- |
 | [Next.js 16](https://nextjs.org/)                            | React framework & routing          |
 | [React 19](https://react.dev/)                               | UI rendering                       |
-| [PeerJS 1.5](https://peerjs.com/)                            | WebRTC peer-to-peer connections    |
+| [PartyKit](https://www.partykit.io/)                         | Real-time room server (WebSockets) |
 | [Framer Motion 12](https://www.framer.com/motion/)           | Card flip & flying-card animations |
 | [Base UI](https://base-ui.com/)                              | Unstyled accessible primitives     |
 | [Tailwind CSS v4](https://tailwindcss.com/)                  | Utility-first styling              |
-| [next-themes](https://github.com/pacocoursey/next-themes)    | Dark / light theme switching       |
 | [DiceBear](https://www.dicebear.com/)                        | Pixel-art avatar generation        |
 | [canvas-confetti](https://github.com/catdad/canvas-confetti) | Consensus celebration effect       |
-| [Sonner](https://sonner.emilkowal.ski/)                      | Toast notifications                |
 | [Lucide React](https://lucide.dev/)                          | Icon set                           |
 
 ---

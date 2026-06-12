@@ -15,7 +15,7 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "Planning Poker",
   description:
-    "Estimate together in real time — peer-to-peer, no server required.",
+    "Estimate user stories together in real time — free, no account required.",
 }
 
 export default function RootLayout({
