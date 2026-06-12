@@ -20,6 +20,7 @@ export const PlayingCard = ({
   hotkey,
 }: Props) => (
   <motion.button
+    data-card={card.value}
     onClick={() => !disabled && onSelect(card.value)}
     whileHover={!disabled ? { y: -12, scale: 1.08 } : {}}
     whileTap={!disabled ? { scale: 0.93 } : {}}

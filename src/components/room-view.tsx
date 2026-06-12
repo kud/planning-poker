@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
+import Link from "next/link"
 import { motion, AnimatePresence } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -364,7 +365,10 @@ export const RoomView = ({
   const [flyingCard, setFlyingCard] = useState<{
     value: string
     label?: string
-    targetY: number
+    startX: number
+    startY: number
+    dx: number
+    dy: number
   } | null>(null)
   const [announcement, setAnnouncement] = useState<Announcement | null>(null)
   const [rollingDice, setRollingDice] = useState(false)
@@ -431,11 +435,23 @@ export const RoomView = ({
     playVote()
     const tableVisible = tableRef.current?.offsetParent != null
     if (!tableVisible) return
+    const cardEl = document.querySelector(`[data-card="${CSS.escape(value)}"]`)
+    const cardRect = cardEl?.getBoundingClientRect()
+    const tableRect = tableRef.current!.getBoundingClientRect()
+    const startX = cardRect
+      ? cardRect.left + cardRect.width / 2
+      : window.innerWidth / 2
+    const startY = cardRect
+      ? cardRect.top + cardRect.height / 2
+      : window.innerHeight - 150
     const card = state.deck.cards.find((c) => c.value === value)
-    const cardCenterFromTop = window.innerHeight - 110 - 40
-    const rect = tableRef.current!.getBoundingClientRect()
-    const targetY = rect.top + rect.height / 2 - cardCenterFromTop
-    setFlyingCard({ ...(card ?? { value }), targetY })
+    setFlyingCard({
+      ...(card ?? { value }),
+      startX,
+      startY,
+      dx: tableRect.left + tableRect.width / 2 - startX,
+      dy: tableRect.top + tableRect.height / 2 - startY,
+    })
     setTimeout(() => setFlyingCard(null), 750)
   }
 
@@ -514,10 +530,15 @@ export const RoomView = ({
         className={`flex-none border-b ${s.header} backdrop-blur-md px-3 sm:px-6 py-2 sm:py-3 flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5 z-10`}
       >
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-          <span className="text-xl">🃏</span>
-          <span className="font-semibold tracking-tight hidden md:inline">
-            Planning Poker
-          </span>
+          <Link
+            href="/"
+            className="flex items-center gap-2 sm:gap-3 hover:opacity-80 transition-opacity"
+          >
+            <span className="text-xl">🃏</span>
+            <span className="font-semibold tracking-tight hidden md:inline">
+              Planning Poker
+            </span>
+          </Link>
           <span
             className="text-[11px] sm:text-xs font-mono px-2 py-0.5 rounded-full border whitespace-nowrap"
             style={{
@@ -904,11 +925,14 @@ export const RoomView = ({
           <motion.div
             key={flyingCard.value + "-fly"}
             className="fixed z-50 pointer-events-none flex flex-col items-center justify-center w-20 h-28 rounded-xl border-2 border-primary bg-[#fffdf7] shadow-[0_0_28px_rgba(99,102,241,0.65)]"
-            style={{ left: "50%", bottom: 110 }}
-            initial={{ y: 0, x: "-50%", scale: 1, rotate: 0, opacity: 1 }}
+            style={{
+              left: flyingCard.startX - 40,
+              top: flyingCard.startY - 56,
+            }}
+            initial={{ x: 0, y: 0, scale: 1, rotate: 0, opacity: 1 }}
             animate={{
-              y: [0, flyingCard.targetY, flyingCard.targetY],
-              x: "-50%",
+              x: [0, flyingCard.dx, flyingCard.dx],
+              y: [0, flyingCard.dy, flyingCard.dy],
               scale: [1, 0.78, 0.6],
               rotate: [0, -8, 0],
               opacity: [1, 1, 0],

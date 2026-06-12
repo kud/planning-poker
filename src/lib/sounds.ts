@@ -106,7 +106,7 @@ export const playPurr = () => {
   const audio = audioContext()
   if (!audio || isMuted()) return
   const start = audio.currentTime
-  const duration = 1.9
+  const duration = 2.7
 
   const length = Math.ceil(audio.sampleRate * duration)
   const buffer = audio.createBuffer(1, length, audio.sampleRate)
@@ -139,9 +139,16 @@ export const playPurr = () => {
 
   const envelope = audio.createGain()
   envelope.gain.setValueAtTime(0, start)
-  envelope.gain.linearRampToValueAtTime(0.5, start + 0.25)
-  envelope.gain.setValueAtTime(0.5, start + duration - 0.5)
-  envelope.gain.exponentialRampToValueAtTime(0.001, start + duration)
+  envelope.gain.linearRampToValueAtTime(0.28, start + 0.2)
+  envelope.gain.setValueAtTime(0.28, start + duration - 0.5)
+  envelope.gain.linearRampToValueAtTime(0.0001, start + duration)
+
+  const breath = audio.createOscillator()
+  const breathDepth = audio.createGain()
+  breath.frequency.value = 0.9
+  breathDepth.gain.value = 0.24
+  breath.connect(breathDepth)
+  breathDepth.connect(envelope.gain)
 
   source.connect(lowpass)
   lowpass.connect(throat)
@@ -151,6 +158,8 @@ export const playPurr = () => {
   source.start(start)
   lfo.start(start)
   lfo.stop(start + duration)
+  breath.start(start)
+  breath.stop(start + duration)
 }
 
 export const playScamper = () => {

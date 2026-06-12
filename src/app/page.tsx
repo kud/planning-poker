@@ -113,7 +113,7 @@ const LandingForm = () => {
       transition={{ type: "spring", stiffness: 280, damping: 28, delay: 0.15 }}
       className="w-full max-w-sm"
     >
-      <div className="bg-white/95 text-slate-900 backdrop-blur-lg rounded-3xl shadow-[0_24px_80px_rgba(0,0,0,0.55)] border border-white/20 p-7 flex flex-col gap-5">
+      <div className="bg-white/95 text-slate-900 backdrop-blur-lg rounded-3xl shadow-[0_24px_80px_rgba(0,0,0,0.55),0_0_46px_rgba(250,204,21,0.22)] ring-1 ring-yellow-400/40 border border-white/20 p-7 flex flex-col gap-5">
         <div className="flex rounded-xl border overflow-hidden bg-muted/40">
           {(["create", "join"] as const).map((m) => (
             <button
@@ -407,7 +407,43 @@ export default function HomePage() {
             ))}
           </motion.ul>
         </div>
-        <div className="flex justify-center lg:justify-end">
+        <div className="relative flex justify-center lg:justify-end">
+          {/* Doodle arrow pointing at the form */}
+          <div
+            className="absolute hidden lg:block right-[24.5rem] top-1/4 w-44 pointer-events-none select-none"
+            aria-hidden
+          >
+            <p className="font-serif italic text-slate-300/90 text-lg -rotate-6 mb-1">
+              enter the room
+            </p>
+            <svg viewBox="0 0 150 80" fill="none" className="w-36">
+              <motion.path
+                d="M40 10 Q 60 68 132 46"
+                stroke="rgba(255,255,255,0.65)"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeDasharray="7 9"
+                initial={{ pathLength: 0, opacity: 0 }}
+                whileInView={{ pathLength: 1, opacity: 1 }}
+                viewport={{ once: true }}
+                transition={{
+                  pathLength: { duration: 1.1, delay: 0.5, ease: "easeOut" },
+                  opacity: { duration: 0.01, delay: 0.5 },
+                }}
+              />
+              <motion.path
+                d="M119 39 L 134 46 L 116 57"
+                stroke="rgba(255,255,255,0.65)"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                initial={{ opacity: 0 }}
+                whileInView={{ opacity: 1 }}
+                viewport={{ once: true }}
+                transition={{ delay: 1.5, duration: 0.3 }}
+              />
+            </svg>
+          </div>
           <LandingForm />
         </div>
       </section>

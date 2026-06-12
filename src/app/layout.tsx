@@ -1,4 +1,4 @@
-import type { Metadata } from "next"
+import type { Metadata, Viewport } from "next"
 import { Inter, JetBrains_Mono } from "next/font/google"
 import "./globals.css"
 
@@ -16,6 +16,18 @@ export const metadata: Metadata = {
   title: "Planning Poker",
   description:
     "Estimate user stories together in real time — free, no account required.",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Planning Poker",
+  },
+  icons: {
+    apple: "/apple-touch-icon.png",
+  },
+}
+
+export const viewport: Viewport = {
+  themeColor: "#0d1117",
 }
 
 export default function RootLayout({
