@@ -36,6 +36,8 @@ export default class PokerRoom implements Party.Server {
     deck: defaultDeck(),
     revealed: false,
     participants: {},
+    speaker: null,
+    spoken: [],
   }
   private hostSecret: string | null = null
   private connToClientId = new Map<string, string>()
@@ -123,6 +125,7 @@ export default class PokerRoom implements Party.Server {
 
     switch (msg.type) {
       case "vote": {
+        if (this.state.revealed) return
         this.ensureParticipant(clientId, sender.id)
         this.state = {
           ...this.state,
@@ -168,6 +171,8 @@ export default class PokerRoom implements Party.Server {
         this.state = {
           ...this.state,
           revealed: false,
+          speaker: null,
+          spoken: [],
           participants: Object.fromEntries(
             Object.entries(this.state.participants).map(([id, p]) => [
               id,
@@ -176,6 +181,23 @@ export default class PokerRoom implements Party.Server {
           ),
         }
         this.persist()
+        break
+      }
+      case "roll-speaker": {
+        if (!isHost) return
+        const ids = Object.keys(this.state.participants)
+        const alreadySpoken = this.state.spoken.filter((id) => ids.includes(id))
+        const fresh = alreadySpoken.length >= ids.length ? [] : alreadySpoken
+        const candidates = ids.filter(
+          (id) => !fresh.includes(id) && id !== this.state.speaker,
+        )
+        if (candidates.length === 0) break
+        const picked = candidates[Math.floor(Math.random() * candidates.length)]
+        this.state = {
+          ...this.state,
+          speaker: picked,
+          spoken: [...fresh, picked],
+        }
         break
       }
       case "set-deck": {
@@ -209,7 +231,11 @@ export default class PokerRoom implements Party.Server {
     if (!this.state.participants[clientId]) return
     const participants = { ...this.state.participants }
     delete participants[clientId]
-    this.state = { ...this.state, participants }
+    this.state = {
+      ...this.state,
+      participants,
+      speaker: this.state.speaker === clientId ? null : this.state.speaker,
+    }
     this.room.broadcast(
       JSON.stringify({ type: "state", state: this.state } satisfies Message),
     )

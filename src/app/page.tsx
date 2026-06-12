@@ -16,13 +16,19 @@ const DecorativeCard = ({
   suit,
   red,
   className,
+  drift = 10,
+  duration = 5,
 }: {
   value: string
   suit: string
   red?: boolean
   className: string
+  drift?: number
+  duration?: number
 }) => (
-  <div
+  <motion.div
+    animate={{ y: [0, -drift, 0], rotate: [0, drift / 4, 0] }}
+    transition={{ duration, ease: "easeInOut", repeat: Infinity }}
     className={`absolute w-20 h-28 rounded-2xl bg-white/90 shadow-xl border border-white/60 flex flex-col justify-between p-2.5 select-none pointer-events-none ${className}`}
   >
     <div
@@ -40,8 +46,14 @@ const DecorativeCard = ({
     >
       {value}
     </div>
-  </div>
+  </motion.div>
 )
+
+const FEATURES = [
+  { emoji: "⚡", label: "Instant rooms" },
+  { emoji: "🔒", label: "No accounts" },
+  { emoji: "🃏", label: "Custom decks" },
+]
 
 const LandingForm = () => {
   const router = useRouter()
@@ -122,9 +134,11 @@ const LandingForm = () => {
           >
             🃏
           </motion.div>
-          <h1 className="text-2xl font-bold tracking-tight">Planning Poker</h1>
-          <p className="text-muted-foreground mt-1 text-sm">
-            Estimate together, in real time
+          <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-indigo-600 via-violet-600 to-indigo-600 bg-clip-text text-transparent">
+            Planning Poker
+          </h1>
+          <p className="text-muted-foreground mt-1.5 text-sm">
+            Estimate stories together, in real time
           </p>
         </div>
 
@@ -208,10 +222,38 @@ const LandingForm = () => {
           )}
         </motion.div>
 
-        <p className="text-xs text-center text-muted-foreground">
-          Free · real-time · no account
-        </p>
+        <div className="flex justify-center gap-4">
+          {FEATURES.map((feature, i) => (
+            <motion.div
+              key={feature.label}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 + i * 0.1 }}
+              className="flex items-center gap-1.5 text-xs text-muted-foreground"
+            >
+              <span>{feature.emoji}</span>
+              <span>{feature.label}</span>
+            </motion.div>
+          ))}
+        </div>
       </div>
+
+      <motion.p
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.8 }}
+        className="mt-4 text-center text-xs text-slate-500"
+      >
+        Free & open source ·{" "}
+        <a
+          href="https://github.com/kud/planning-poker"
+          target="_blank"
+          rel="noreferrer"
+          className="underline underline-offset-4 hover:text-slate-700 transition-colors"
+        >
+          GitHub
+        </a>
+      </motion.p>
     </motion.div>
   )
 }
@@ -233,23 +275,31 @@ export default function HomePage() {
           value="A"
           suit="♠"
           className="top-10 left-6 rotate-[-18deg]"
+          drift={12}
+          duration={5.5}
         />
         <DecorativeCard
           value="K"
           suit="♥"
           red
           className="top-20 left-16 rotate-[-7deg] opacity-80"
+          drift={8}
+          duration={4.2}
         />
         <DecorativeCard
           value="Q"
           suit="♦"
           red
           className="bottom-10 right-6 rotate-[18deg]"
+          drift={10}
+          duration={6}
         />
         <DecorativeCard
           value="J"
           suit="♣"
           className="bottom-20 right-16 rotate-[7deg] opacity-80"
+          drift={7}
+          duration={4.8}
         />
       </div>
       <LandingForm />

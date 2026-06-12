@@ -8,6 +8,7 @@ import { avatarUrl } from "@/lib/avatar"
 type Props = {
   participant: Participant
   theme: "dark" | "light"
+  isSpeaker?: boolean
 }
 
 const NAME_COLORS = {
@@ -18,7 +19,7 @@ const NAME_COLORS = {
 const rhythm = (id: string) =>
   [...id].reduce((acc, char) => acc + char.charCodeAt(0), 0)
 
-export const SeatAvatar = ({ participant, theme }: Props) => {
+export const SeatAvatar = ({ participant, theme, isSpeaker }: Props) => {
   const seed = rhythm(participant.id)
   const bobDuration = 2.2 + (seed % 5) * 0.25
   const tiltDelay = 3 + (seed % 7) * 0.8
@@ -51,10 +52,22 @@ export const SeatAvatar = ({ participant, theme }: Props) => {
             "w-9 h-9 sm:w-11 sm:h-11 rounded-xl transition-shadow",
             participant.vote !== null &&
               "shadow-[0_0_14px_rgba(99,102,241,0.65)] ring-2 ring-indigo-400/60",
+            isSpeaker &&
+              "shadow-[0_0_18px_rgba(251,191,36,0.75)] ring-2 ring-amber-400",
           )}
         />
         {participant.isHost && (
           <span className="absolute -top-2 -right-2 text-xs">👑</span>
+        )}
+        {isSpeaker && (
+          <motion.span
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ type: "spring", stiffness: 400, damping: 18 }}
+            className="absolute -bottom-1.5 -right-1.5 text-sm"
+          >
+            🎤
+          </motion.span>
         )}
       </motion.div>
       <span

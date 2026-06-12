@@ -25,15 +25,15 @@ type Props = {
 }
 
 const CardPreview = ({ cards }: { cards: Card[] }) => (
-  <div className="flex flex-wrap gap-1.5">
+  <div className="flex flex-wrap gap-2">
     {cards.map((c) => (
       <span
         key={c.value}
-        className="inline-flex flex-col items-center rounded-md border bg-muted px-2 py-1 text-xs font-medium leading-none"
+        className="inline-flex flex-col items-center justify-center w-12 h-16 rounded-lg border-2 border-slate-200 bg-[#fffdf7] shadow-sm text-base font-bold text-slate-800 leading-none"
       >
         {c.value}
         {c.label && (
-          <span className="mt-0.5 text-[9px] text-muted-foreground">
+          <span className="mt-1 text-[10px] font-semibold text-slate-400">
             {c.label}
           </span>
         )}

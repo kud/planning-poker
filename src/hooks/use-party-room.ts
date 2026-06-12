@@ -58,6 +58,7 @@ export const usePartyRoom = ({
     reveal: () => send({ type: "reveal" }),
     reset: () => send({ type: "reset" }),
     setDeck: (deck: Deck) => send({ type: "set-deck", deck }),
+    rollSpeaker: () => send({ type: "roll-speaker" }),
     updateProfile: (name: string, avatar: string) =>
       send({ type: "update-profile", name, avatar }),
   }

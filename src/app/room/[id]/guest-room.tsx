@@ -1,10 +1,12 @@
 "use client"
 
-import { useSyncExternalStore } from "react"
+import { useEffect, useRef, useSyncExternalStore } from "react"
 import Link from "next/link"
 import { RoomView } from "@/components/room-view"
 import { usePartyRoom } from "@/hooks/use-party-room"
 import { useShareRoom } from "@/hooks/use-share-room"
+import { loadPreferredDeck, savePreferredDeck } from "@/lib/settings"
+import { Deck } from "@/lib/types"
 
 type Props = { hostId: string; name: string; avatar: string }
 
@@ -65,15 +67,44 @@ const GuestRoomConnected = ({
   clientId: string
   hostSecret?: string
 }) => {
-  const { state, connected, vote, reveal, reset, setDeck, updateProfile } =
-    usePartyRoom({
-      roomId,
-      name,
-      avatar,
-      hostSecret,
-      clientId,
-    })
+  const {
+    state,
+    connected,
+    vote,
+    reveal,
+    reset,
+    setDeck,
+    rollSpeaker,
+    updateProfile,
+  } = usePartyRoom({
+    roomId,
+    name,
+    avatar,
+    hostSecret,
+    clientId,
+  })
   const { copiedMode, copyCode, copyLink } = useShareRoom(roomId)
+  const preferredDeckApplied = useRef(false)
+
+  const amHost = state?.participants[clientId]?.isHost ?? false
+
+  useEffect(() => {
+    if (!state || !amHost || preferredDeckApplied.current) return
+    preferredDeckApplied.current = true
+    const roomIsFresh =
+      Object.keys(state.participants).length <= 1 &&
+      !state.revealed &&
+      Object.values(state.participants).every((p) => p.vote === null)
+    if (!roomIsFresh) return
+    const preferred = loadPreferredDeck()
+    if (preferred && JSON.stringify(preferred) !== JSON.stringify(state.deck))
+      setDeck(preferred)
+  }, [state, amHost, setDeck])
+
+  const applyDeck = (deck: Deck) => {
+    savePreferredDeck(deck)
+    setDeck(deck)
+  }
 
   if (!connected || !state) {
     return (
@@ -101,7 +132,8 @@ const GuestRoomConnected = ({
       onVote={vote}
       onReveal={reveal}
       onReset={reset}
-      onSetDeck={setDeck}
+      onSetDeck={applyDeck}
+      onRollSpeaker={rollSpeaker}
       onCopyCode={copyCode}
       onCopyLink={copyLink}
       copiedMode={copiedMode}

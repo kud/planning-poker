@@ -23,12 +23,13 @@ export const DECK_PRESETS: Record<
   numeric: {
     name: "Numeric",
     cards: [
-      { value: "1", label: "XS" },
-      { value: "2", label: "S" },
-      { value: "4", label: "M" },
-      { value: "8", label: "L" },
-      { value: "16", label: "XL" },
-      { value: "32", label: "XXL" },
+      { value: "1" },
+      { value: "2" },
+      { value: "4" },
+      { value: "8" },
+      { value: "16" },
+      { value: "32" },
+      { value: "?" },
     ],
   },
   tshirt: {

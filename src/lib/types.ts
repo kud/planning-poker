@@ -24,6 +24,8 @@ export type RoomState = {
   deck: Deck
   participants: Record<string, Participant>
   revealed: boolean
+  speaker: string | null
+  spoken: string[]
 }
 
 export type Message =
@@ -33,3 +35,4 @@ export type Message =
   | { type: "reveal" }
   | { type: "reset" }
   | { type: "set-deck"; deck: Deck }
+  | { type: "roll-speaker" }

@@ -11,6 +11,8 @@ import { DeckSelector } from "@/components/deck-selector"
 import { VoteSummary } from "@/components/vote-summary"
 import { Deck, RoomState } from "@/lib/types"
 import { SettingsDialog } from "@/components/settings-dialog"
+import { OnboardingHints } from "@/components/onboarding-hints"
+import { PixelPet } from "@/components/pixel-pet"
 import { saveSettings } from "@/lib/settings"
 
 type Theme = "dark" | "light"
@@ -27,6 +29,67 @@ type Props = {
   onCopyLink?: () => void
   copiedMode?: "code" | "link" | null
   onUpdateProfile?: (name: string, avatar: string) => void
+  onRollSpeaker?: () => void
+}
+
+type Announcement = { emoji: string; title: string; sub: string }
+
+const revealQuip = (votes: string[]): Announcement => {
+  const numbers = votes.map(Number).filter((n) => !Number.isNaN(n))
+  const distinct = new Set(votes)
+
+  if (
+    votes.length > 1 &&
+    distinct.size === 1 &&
+    !["?", "☕"].includes(votes[0])
+  )
+    return {
+      emoji: "🏆",
+      title: "Unanimous!",
+      sub: "Perfect consensus — ship it 🚀",
+    }
+  if (votes.includes("☕"))
+    return {
+      emoji: "☕",
+      title: "Coffee break?",
+      sub: "Someone played the coffee card",
+    }
+  if (numbers.length >= 2) {
+    const min = Math.min(...numbers)
+    const max = Math.max(...numbers)
+    const avg = numbers.reduce((a, b) => a + b, 0) / numbers.length
+    if (max >= 13 && max / Math.max(min, 0.5) >= 4)
+      return {
+        emoji: "😱",
+        title: `From ${min} to ${max} — that's quite a gap`,
+        sub: "Someone knows something we don't…",
+      }
+    if (avg >= 13)
+      return {
+        emoji: "🌶️",
+        title: `${Math.round(avg)} on average — spicy`,
+        sub: "Big one. Brace yourselves",
+      }
+    if (avg <= 2)
+      return {
+        emoji: "🍃",
+        title: "Barely a warm-up",
+        sub: "Quick win — next!",
+      }
+    if (max - min >= 5)
+      return {
+        emoji: "🎭",
+        title: "Quite the spread",
+        sub: "Time to talk it out",
+      }
+  }
+  if (votes.includes("?"))
+    return {
+      emoji: "🔍",
+      title: "Mystery at the table",
+      sub: "Someone needs more details",
+    }
+  return { emoji: "🃏", title: "The table has spoken", sub: "Solid round" }
 }
 
 const THEME_STYLES = {
@@ -122,6 +185,7 @@ const ShareMenu = ({
       <Button
         variant="ghost"
         size="sm"
+        data-tour="share"
         onClick={() => setOpen((v) => !v)}
         className={`border text-xs ${btnClass}`}
       >
@@ -167,6 +231,7 @@ const RoundControls = ({
   total,
   onReveal,
   onReset,
+  onRollSpeaker,
 }: {
   state: RoomState
   isHost: boolean
@@ -175,6 +240,7 @@ const RoundControls = ({
   total: number
   onReveal?: () => void
   onReset?: () => void
+  onRollSpeaker?: () => void
 }) => (
   <AnimatePresence mode="wait">
     {!state.revealed ? (
@@ -194,6 +260,7 @@ const RoundControls = ({
         {isHost && (
           <Button
             size="sm"
+            data-tour="reveal"
             onClick={onReveal}
             className={cn(
               "bg-red-700 hover:bg-red-600 text-white border border-yellow-500/40 shadow-[0_0_20px_rgba(185,28,28,0.6),inset_0_1px_0_rgba(255,220,100,0.2)] font-semibold tracking-wide",
@@ -211,20 +278,31 @@ const RoundControls = ({
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.9 }}
         transition={{ duration: 0.2 }}
-        className="flex flex-col items-center gap-2 sm:gap-3"
+        className="flex flex-col md:flex-row items-center justify-center gap-2 md:gap-5"
       >
         <VoteSummary
           participants={state.participants}
           revealed={state.revealed}
         />
         {isHost && (
-          <Button
-            size="sm"
-            onClick={onReset}
-            className="border-white/20 bg-white/10 text-white hover:bg-white/20"
-          >
-            New round
-          </Button>
+          <div className="flex items-center gap-2 flex-none">
+            {onRollSpeaker && total > 1 && (
+              <Button
+                size="sm"
+                onClick={onRollSpeaker}
+                className="border border-amber-400/30 bg-amber-500/15 text-amber-100 hover:bg-amber-500/25"
+              >
+                🎲 Speaker
+              </Button>
+            )}
+            <Button
+              size="sm"
+              onClick={onReset}
+              className="border-white/20 bg-white/10 text-white hover:bg-white/20"
+            >
+              New round
+            </Button>
+          </div>
         )}
       </motion.div>
     )}
@@ -243,6 +321,7 @@ export const RoomView = ({
   onCopyLink,
   copiedMode,
   onUpdateProfile,
+  onRollSpeaker,
 }: Props) => {
   const [theme, setTheme] = useState<Theme>("dark")
   const [flyingCard, setFlyingCard] = useState<{
@@ -250,7 +329,40 @@ export const RoomView = ({
     label?: string
     targetY: number
   } | null>(null)
+  const [announcement, setAnnouncement] = useState<Announcement | null>(null)
+  const [rollingDice, setRollingDice] = useState(false)
+  const prevRevealed = useRef(false)
   const tableRef = useRef<HTMLDivElement>(null)
+  const latestVotes = useRef<string[]>([])
+  useEffect(() => {
+    latestVotes.current = Object.values(state.participants)
+      .map((p) => p.vote)
+      .filter((v): v is string => v !== null)
+  })
+
+  useEffect(() => {
+    const was = prevRevealed.current
+    prevRevealed.current = state.revealed
+    if (was === state.revealed) return
+    setAnnouncement(
+      state.revealed
+        ? revealQuip(latestVotes.current)
+        : {
+            emoji: "🤵",
+            title: "New round",
+            sub: "Place your votes, ladies and gentlemen",
+          },
+    )
+    const timer = setTimeout(() => setAnnouncement(null), 3000)
+    return () => clearTimeout(timer)
+  }, [state.revealed])
+
+  useEffect(() => {
+    if (!state.speaker) return
+    setRollingDice(true)
+    const timer = setTimeout(() => setRollingDice(false), 900)
+    return () => clearTimeout(timer)
+  }, [state.speaker])
 
   useEffect(() => {
     const saved = localStorage.getItem("pp-theme") as Theme | null
@@ -274,6 +386,27 @@ export const RoomView = ({
     setFlyingCard({ ...(card ?? { value }), targetY })
     setTimeout(() => setFlyingCard(null), 750)
   }
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      const target = e.target as HTMLElement
+      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") return
+      const key = e.key.toLowerCase()
+      if (!state.revealed && /^[0-9]$/.test(key)) {
+        const index = key === "0" ? 9 : Number(key) - 1
+        const card = state.deck.cards[index]
+        if (card) handleVote(card.value)
+      }
+      const anyVotes = Object.values(state.participants).some(
+        (p) => p.vote !== null,
+      )
+      if (isHost && key === "r" && !state.revealed && anyVotes) onReveal?.()
+      if (isHost && key === "n" && state.revealed) onReset?.()
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  })
 
   const me = state.participants[myId]
   const participants = Object.values(state.participants)
@@ -388,9 +521,11 @@ export const RoomView = ({
 
       {/* Table area */}
       <main className="flex-1 relative flex items-center justify-center overflow-hidden">
+        <PixelPet />
         {/* Mobile — roster grid, no table */}
         <div className="md:hidden w-full max-h-full overflow-y-auto px-4 py-5 flex flex-col items-center gap-6">
           <div
+            data-tour="table"
             className={cn(
               "grid gap-x-3 gap-y-5 justify-items-center w-full max-w-sm",
               seated.length > 6 ? "grid-cols-4" : "grid-cols-3",
@@ -411,7 +546,11 @@ export const RoomView = ({
                   }}
                   className="flex flex-col items-center gap-2"
                 >
-                  <SeatAvatar participant={participant} theme={theme} />
+                  <SeatAvatar
+                    participant={participant}
+                    theme={theme}
+                    isSpeaker={participant.id === state.speaker}
+                  />
                   {participant.vote !== null ? (
                     <TableCard
                       participant={participant}
@@ -444,6 +583,7 @@ export const RoomView = ({
               total={participants.length}
               onReveal={onReveal}
               onReset={onReset}
+              onRollSpeaker={onRollSpeaker}
             />
           </div>
         </div>
@@ -451,6 +591,7 @@ export const RoomView = ({
         {/* Desktop — poker table */}
         <div
           ref={tableRef}
+          data-tour="table"
           className="relative hidden md:block"
           style={{ width: "min(640px, 74vw)", aspectRatio: "640 / 268" }}
         >
@@ -498,6 +639,7 @@ export const RoomView = ({
               total={participants.length}
               onReveal={onReveal}
               onReset={onReset}
+              onRollSpeaker={onRollSpeaker}
             />
           </div>
 
@@ -537,7 +679,11 @@ export const RoomView = ({
                 }}
                 style={seatStyle(seatAngle(i, seated.length))}
               >
-                <SeatAvatar participant={participant} theme={theme} />
+                <SeatAvatar
+                  participant={participant}
+                  theme={theme}
+                  isSpeaker={participant.id === state.speaker}
+                />
               </motion.div>
             ))}
           </AnimatePresence>
@@ -551,12 +697,28 @@ export const RoomView = ({
           s.hand,
         )}
       >
-        <div className="flex flex-col items-center gap-3 sm:gap-5">
-          <p
-            className={`text-[10px] sm:text-xs font-medium tracking-wide uppercase ${s.handLabel}`}
-          >
-            {state.revealed ? "Waiting for next round…" : "Your hand"}
-          </p>
+        <div
+          data-tour="hand"
+          className="flex flex-col items-center gap-3 sm:gap-5"
+        >
+          <div className="flex items-baseline gap-3">
+            <p
+              className={`text-[10px] sm:text-xs font-medium tracking-wide uppercase ${s.handLabel}`}
+            >
+              {state.revealed ? "Waiting for next round…" : "Your hand"}
+            </p>
+            <p
+              className={`hidden sm:block text-[10px] font-mono opacity-60 ${s.handLabel}`}
+            >
+              {isHost
+                ? state.revealed
+                  ? "N — new round"
+                  : "1–9 vote · R reveal"
+                : state.revealed
+                  ? ""
+                  : "press 1–9 to vote"}
+            </p>
+          </div>
           <AnimatePresence mode="wait">
             <motion.div
               key={state.deck.preset}
@@ -584,6 +746,7 @@ export const RoomView = ({
                     selected={me?.vote === card.value}
                     disabled={state.revealed}
                     onSelect={handleVote}
+                    hotkey={i < 9 ? String(i + 1) : i === 9 ? "0" : undefined}
                   />
                 </motion.div>
               ))}
@@ -591,6 +754,67 @@ export const RoomView = ({
           </AnimatePresence>
         </div>
       </div>
+
+      <OnboardingHints isHost={isHost} />
+
+      {/* Dealer announcements — new round & reveal commentary */}
+      <AnimatePresence>
+        {announcement && (
+          <div className="fixed inset-0 z-30 flex items-center justify-center pointer-events-none">
+            <motion.div
+              initial={{ scale: 0.6, opacity: 0, y: 24 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.92, opacity: 0, y: -16 }}
+              transition={{ type: "spring", stiffness: 320, damping: 22 }}
+              className="flex items-center gap-3 rounded-full border-2 border-yellow-500/60 bg-[#10131f]/90 backdrop-blur-md px-6 py-3 shadow-[0_0_40px_rgba(234,179,8,0.3)]"
+            >
+              <span className="text-2xl">{announcement.emoji}</span>
+              <div className="flex flex-col">
+                <span className="text-sm font-semibold text-yellow-100 tracking-wide">
+                  {announcement.title}
+                </span>
+                <span className="text-xs text-yellow-200/60 italic">
+                  {announcement.sub}
+                </span>
+              </div>
+              <span className="text-2xl">🃏</span>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Speaker pick — dice roll then the floor is yours */}
+      <AnimatePresence>
+        {state.speaker && state.participants[state.speaker] && (
+          <motion.div
+            key={state.speaker}
+            initial={{ opacity: 0, y: -12, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -12, scale: 0.9 }}
+            transition={{ type: "spring", stiffness: 320, damping: 24 }}
+            className="fixed top-14 sm:top-16 inset-x-0 z-30 flex justify-center pointer-events-none"
+          >
+            <div className="flex items-center gap-2.5 rounded-full border border-amber-400/40 bg-[#10131f]/90 backdrop-blur-md px-4 py-2 shadow-[0_8px_30px_rgba(0,0,0,0.4)]">
+              {rollingDice ? (
+                <motion.span
+                  animate={{ rotate: 720 }}
+                  transition={{ duration: 0.85, ease: "easeOut" }}
+                  className="text-lg"
+                >
+                  🎲
+                </motion.span>
+              ) : (
+                <span className="text-lg">🎤</span>
+              )}
+              <span className="text-sm font-medium text-amber-100">
+                {rollingDice
+                  ? "Rolling…"
+                  : `${state.participants[state.speaker].name}, the floor is yours`}
+              </span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Flying card — travels from hand to table on vote */}
       <AnimatePresence>
