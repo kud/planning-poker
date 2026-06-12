@@ -5,7 +5,7 @@ import Link from "next/link"
 import { RoomView } from "@/components/room-view"
 import { usePartyRoom } from "@/hooks/use-party-room"
 import { useShareRoom } from "@/hooks/use-share-room"
-import { loadPreferredDeck, savePreferredDeck } from "@/lib/settings"
+import { loadPreferredDeck, savePreferredDeck, touchRoom } from "@/lib/settings"
 import { Deck } from "@/lib/types"
 
 type Props = { hostId: string; name: string; avatar: string }
@@ -22,6 +22,10 @@ const readOrCreateClientId = (roomId: string) => {
 }
 
 export const GuestRoom = ({ hostId, name, avatar }: Props) => {
+  useEffect(() => {
+    touchRoom(hostId)
+  }, [hostId])
+
   const clientId = useSyncExternalStore(
     emptySubscribe,
     () => readOrCreateClientId(hostId),

@@ -31,6 +31,8 @@ const uniqueName = (
 
 type PersistedData = { deck: Deck; hostSecret: string | null }
 
+const ROOM_TTL_MS = 24 * 60 * 60 * 1000
+
 export default class PokerRoom implements Party.Server {
   private state: RoomState = {
     deck: defaultDeck(),
@@ -59,6 +61,27 @@ export default class PokerRoom implements Party.Server {
     return Response.redirect("https://planningdeck.vercel.app", 302)
   }
 
+  private scheduleCleanup() {
+    this.room.storage.setAlarm(Date.now() + ROOM_TTL_MS)
+  }
+
+  async onAlarm() {
+    const stillConnected = [...this.room.getConnections()].length > 0
+    if (stillConnected) {
+      this.scheduleCleanup()
+      return
+    }
+    await this.room.storage.deleteAll()
+    this.state = {
+      deck: defaultDeck(),
+      revealed: false,
+      participants: {},
+      speaker: null,
+      spoken: [],
+    }
+    this.hostSecret = null
+  }
+
   onConnect(conn: Party.Connection, ctx: Party.ConnectionContext) {
     const url = new URL(ctx.request.url)
     const clientId = url.searchParams.get("clientId") ?? conn.id
@@ -70,6 +93,7 @@ export default class PokerRoom implements Party.Server {
     this.connToProfile.set(conn.id, { name, avatar })
     if (secret) this.connToSecret.set(conn.id, secret)
     this.connCounts.set(clientId, (this.connCounts.get(clientId) ?? 0) + 1)
+    this.scheduleCleanup()
 
     if (secret && !this.hostSecret) {
       this.hostSecret = secret
@@ -238,6 +262,7 @@ export default class PokerRoom implements Party.Server {
     this.connToClientId.delete(conn.id)
     this.connToSecret.delete(conn.id)
     this.connToProfile.delete(conn.id)
+    this.scheduleCleanup()
 
     const remaining = (this.connCounts.get(clientId) ?? 1) - 1
     if (remaining > 0) {

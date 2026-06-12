@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { avatarUrl, randomSeed } from "@/lib/avatar"
-import { loadSettings, saveSettings } from "@/lib/settings"
+import { loadSettings, saveSettings, pruneStaleRooms } from "@/lib/settings"
 import { generateRoomCode, normaliseRoomCode } from "@/lib/room-code"
 import { motion } from "framer-motion"
 import { cn } from "@/lib/utils"
@@ -59,6 +59,7 @@ const LandingForm = () => {
   const [avatarOptions, setAvatarOptions] = useState<string[]>([])
 
   useEffect(() => {
+    pruneStaleRooms()
     const join = new URLSearchParams(window.location.search).get("join")
     if (join) {
       setRoomId(join)
