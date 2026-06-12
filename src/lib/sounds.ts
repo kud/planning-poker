@@ -106,44 +106,51 @@ export const playPurr = () => {
   const audio = audioContext()
   if (!audio || isMuted()) return
   const start = audio.currentTime
-  const gain = audio.createGain()
-  const tremolo = audio.createOscillator()
-  const tremoloGain = audio.createGain()
-  tremolo.frequency.value = 22
-  tremoloGain.gain.value = 0.05
-  tremolo.connect(tremoloGain)
-  tremoloGain.connect(gain.gain)
+  const duration = 1.9
 
-  const layers: Array<[number, number]> = [
-    [90, 0.05],
-    [180, 0.06],
-    [360, 0.025],
-  ]
-  const oscillators = layers.map(([frequency, volume]) => {
-    const osc = audio.createOscillator()
-    const oscGain = audio.createGain()
-    osc.type = "sine"
-    osc.frequency.value = frequency
-    oscGain.gain.value = volume
-    osc.connect(oscGain)
-    oscGain.connect(gain)
-    return osc
-  })
+  const length = Math.ceil(audio.sampleRate * duration)
+  const buffer = audio.createBuffer(1, length, audio.sampleRate)
+  const data = buffer.getChannelData(0)
+  for (let i = 0; i < length; i++) data[i] = Math.random() * 2 - 1
+  const source = audio.createBufferSource()
+  source.buffer = buffer
 
-  gain.gain.setValueAtTime(0, start)
-  gain.gain.linearRampToValueAtTime(1, start + 0.18)
-  gain.gain.setValueAtTime(1, start + 1.3)
-  gain.gain.exponentialRampToValueAtTime(0.001, start + 1.8)
-  const master = audio.createGain()
-  master.gain.value = 1
-  gain.connect(master)
-  master.connect(audio.destination)
-  tremolo.start(start)
-  tremolo.stop(start + 1.9)
-  oscillators.forEach((osc) => {
-    osc.start(start)
-    osc.stop(start + 1.9)
-  })
+  const lowpass = audio.createBiquadFilter()
+  lowpass.type = "lowpass"
+  lowpass.frequency.value = 300
+  lowpass.Q.value = 0.5
+
+  const throat = audio.createBiquadFilter()
+  throat.type = "peaking"
+  throat.frequency.value = 120
+  throat.Q.value = 1.4
+  throat.gain.value = 8
+
+  const pulse = audio.createGain()
+  pulse.gain.value = 0.72
+  const lfo = audio.createOscillator()
+  const lfoDepth = audio.createGain()
+  lfo.frequency.setValueAtTime(26, start)
+  lfo.frequency.linearRampToValueAtTime(29, start + duration / 2)
+  lfo.frequency.linearRampToValueAtTime(25, start + duration)
+  lfoDepth.gain.value = 0.16
+  lfo.connect(lfoDepth)
+  lfoDepth.connect(pulse.gain)
+
+  const envelope = audio.createGain()
+  envelope.gain.setValueAtTime(0, start)
+  envelope.gain.linearRampToValueAtTime(0.5, start + 0.25)
+  envelope.gain.setValueAtTime(0.5, start + duration - 0.5)
+  envelope.gain.exponentialRampToValueAtTime(0.001, start + duration)
+
+  source.connect(lowpass)
+  lowpass.connect(throat)
+  throat.connect(pulse)
+  pulse.connect(envelope)
+  envelope.connect(audio.destination)
+  source.start(start)
+  lfo.start(start)
+  lfo.stop(start + duration)
 }
 
 export const playScamper = () => {

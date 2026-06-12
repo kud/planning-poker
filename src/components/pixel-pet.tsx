@@ -133,7 +133,7 @@ export const PixelPet = () => {
   const handleClick = () => {
     if (segment.kind === "purr" || segment.kind === "flee") return
     const here = currentPercent()
-    if (Math.random() < 0.5) {
+    if (Math.random() < 2 / 3) {
       playPurr()
       const rest = stroll.segments
         .slice(segIndex)

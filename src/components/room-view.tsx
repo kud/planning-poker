@@ -13,6 +13,7 @@ import { Deck, RoomState } from "@/lib/types"
 import { SettingsDialog } from "@/components/settings-dialog"
 import { OnboardingHints } from "@/components/onboarding-hints"
 import { PixelPet } from "@/components/pixel-pet"
+import { PixelDealer } from "@/components/pixel-dealer"
 import {
   isMuted,
   setMuted,
@@ -42,7 +43,7 @@ type Props = {
   onRollSpeaker?: () => void
 }
 
-type Announcement = { emoji: string; title: string; sub: string }
+export type Announcement = { emoji: string; title: string; sub: string }
 
 const revealQuip = (votes: string[]): Announcement => {
   const numbers = votes.map(Number).filter((n) => !Number.isNaN(n))
@@ -452,8 +453,11 @@ export const RoomView = ({
       const anyVotes = Object.values(state.participants).some(
         (p) => p.vote !== null,
       )
-      if (isHost && key === "r" && !state.revealed && anyVotes) onReveal?.()
-      if (isHost && key === "n" && state.revealed) onReset?.()
+      const reveal = key === "r" || e.key === " "
+      const nextRound = key === "n" || e.key === " "
+      if (e.key === " ") e.preventDefault()
+      if (isHost && reveal && !state.revealed && anyVotes) onReveal?.()
+      else if (isHost && nextRound && state.revealed) onReset?.()
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
@@ -667,6 +671,7 @@ export const RoomView = ({
           className="relative hidden md:block"
           style={{ width: "min(640px, 74vw)", aspectRatio: "640 / 268" }}
         >
+          <PixelDealer announcement={announcement} />
           {/* Felt */}
           <div
             className="absolute inset-0"
@@ -789,8 +794,8 @@ export const RoomView = ({
             >
               {isHost
                 ? state.revealed
-                  ? "N — new round"
-                  : "1–9 vote · R reveal"
+                  ? "space — new round"
+                  : "1–9 vote · space reveal"
                 : state.revealed
                   ? ""
                   : "press 1–9 to vote"}
@@ -834,10 +839,10 @@ export const RoomView = ({
 
       <OnboardingHints isHost={isHost} />
 
-      {/* Dealer announcements — new round & reveal commentary */}
+      {/* Dealer announcements on mobile — the pixel dealer handles desktop */}
       <AnimatePresence>
         {announcement && (
-          <div className="fixed inset-0 z-30 flex items-center justify-center pointer-events-none">
+          <div className="fixed inset-0 z-30 flex items-center justify-center pointer-events-none md:hidden">
             <motion.div
               initial={{ scale: 0.6, opacity: 0, y: 24 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
