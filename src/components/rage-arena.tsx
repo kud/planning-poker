@@ -250,6 +250,23 @@ export const RageArena = ({
     )
   }
 
+  const removeBot = () => {
+    const b = bots.current.pop()
+    if (!b) return
+    nodeRefs.current.delete(b.id)
+    hpRefs.current.delete(b.id)
+    fistRefs.current.delete(b.id)
+    killsRef.current.delete(b.id)
+    if (chair.current.heldBy === b.id) chair.current.heldBy = null
+    setBotList(
+      bots.current.map((bot) => ({
+        id: bot.id,
+        name: bot.name,
+        seed: bot.seed,
+      })),
+    )
+  }
+
   useEffect(() => {
     playBell()
     const t = setTimeout(() => setIntro(false), INTRO_MS)
@@ -1061,6 +1078,14 @@ export const RageArena = ({
         >
           🤖 Add bot
         </button>
+        {botList.length > 0 && (
+          <button
+            onClick={removeBot}
+            className="rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm text-white hover:bg-white/20"
+          >
+            ➖ Remove bot
+          </button>
+        )}
         {isHost && (
           <button
             onClick={onRequestRestart}

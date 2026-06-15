@@ -88,6 +88,12 @@ const GuestRoomConnected = ({
     editHistory,
     clearHistory,
     setAutoReveal,
+    setTimer,
+    requestBreak,
+    respondBreak,
+    breakRequest,
+    breakResponses,
+    dismissBreak,
     setRage,
     sendRageMove,
     inviteToRage,
@@ -168,6 +174,12 @@ const GuestRoomConnected = ({
         onEditHistory={editHistory}
         onClearHistory={clearHistory}
         onSetAutoReveal={setAutoReveal}
+        onSetTimer={setTimer}
+        onRequestBreak={requestBreak}
+        onRespondBreak={respondBreak}
+        breakRequest={breakRequest}
+        breakResponses={breakResponses}
+        onDismissBreak={dismissBreak}
         onSetRage={setRage}
         onRageMove={sendRageMove}
         onInviteRage={inviteToRage}

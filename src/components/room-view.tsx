@@ -20,6 +20,8 @@ import { TopicBar } from "@/components/topic-bar"
 import { SessionHistory } from "@/components/session-history"
 import { HostActions } from "@/components/host-actions"
 import { RageArena } from "@/components/rage-arena"
+import { RoundTimer } from "@/components/round-timer"
+import { BreakPrompt } from "@/components/break-prompt"
 import { Deck, RoomState } from "@/lib/types"
 import { computeVoteStats } from "@/lib/vote-stats"
 import { SettingsDialog } from "@/components/settings-dialog"
@@ -85,6 +87,12 @@ type Props = {
   onDismissRageInvite?: () => void
   rageRestart?: number
   onRequestRageRestart?: () => void
+  onSetTimer?: (seconds: number) => void
+  onRequestBreak?: () => void
+  onRespondBreak?: (accept: boolean) => void
+  breakRequest?: { from: string; name: string } | null
+  breakResponses?: { from: string; name: string; accept: boolean }[]
+  onDismissBreak?: () => void
   reactions?: Reaction[]
   presenceEvents?: PresenceEvent[]
 }
@@ -111,6 +119,21 @@ const revealQuip = (votes: string[]): Announcement => {
       title: "Coffee break?",
       sub: "Someone played the coffee card",
     }
+  if (numbers.length >= 1) {
+    const top = Math.max(...numbers)
+    if (top >= 40)
+      return {
+        emoji: "🙀",
+        title: `A ${top}?! Has anyone scoped this?`,
+        sub: "Maybe split it into a few epics…",
+      }
+    if (top >= 16)
+      return {
+        emoji: "🤯",
+        title: `Someone said ${top} — wow`,
+        sub: "Brave estimate. Walk us through it?",
+      }
+  }
   if (numbers.length >= 2) {
     const min = Math.min(...numbers)
     const max = Math.max(...numbers)
@@ -378,6 +401,12 @@ export const RoomView = ({
   onDismissRageInvite,
   rageRestart,
   onRequestRageRestart,
+  onSetTimer,
+  onRequestBreak,
+  onRespondBreak,
+  breakRequest,
+  breakResponses,
+  onDismissBreak,
   reactions,
   presenceEvents,
 }: Props) => {
@@ -656,6 +685,17 @@ export const RoomView = ({
                 triggerClassName={`border text-xs ${s.themeBtn}`}
               />
             )}
+            {onRequestBreak && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onRequestBreak}
+                title="Ask the room for a coffee break"
+                className={`border text-xs ${s.themeBtn}`}
+              >
+                ☕ Break
+              </Button>
+            )}
             {isHost && onSetRage && (
               <Button
                 variant="ghost"
@@ -750,13 +790,23 @@ export const RoomView = ({
         )}
 
         {onSetTopic && (
-          <div className={`flex-none border-b ${s.header}`}>
+          <div
+            className={`flex-none border-b ${s.header} flex flex-wrap items-center justify-center gap-x-4 gap-y-1`}
+          >
             <TopicBar
               topic={state.topic}
               isHost={isHost}
               theme={theme}
               onSetTopic={onSetTopic}
             />
+            {onSetTimer && (
+              <RoundTimer
+                timer={state.timer}
+                isHost={isHost}
+                theme={theme}
+                onSetTimer={onSetTimer}
+              />
+            )}
           </div>
         )}
 
@@ -1020,6 +1070,18 @@ export const RoomView = ({
             onRequestRestart={onRequestRageRestart}
           />
         )}
+
+        <AnimatePresence>
+          {breakRequest && onRespondBreak && onDismissBreak && (
+            <BreakPrompt
+              request={breakRequest}
+              responses={breakResponses ?? []}
+              myId={myId}
+              onRespond={onRespondBreak}
+              onDismiss={onDismissBreak}
+            />
+          )}
+        </AnimatePresence>
 
         <AnimatePresence>
           {rageInvite && !rageActive && state.rageEnabled && (
