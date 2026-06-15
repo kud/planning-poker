@@ -399,7 +399,7 @@ export default function HomePage() {
             {[
               "Rooms in one click — share a code, start voting",
               "Hidden votes, simultaneous reveal, no anchoring",
-              "Works on desktop and mobile, free forever",
+              "Works on any device — nothing to install",
             ].map((line) => (
               <li key={line} className="flex items-center gap-2.5">
                 <span className="text-emerald-400">✓</span>
