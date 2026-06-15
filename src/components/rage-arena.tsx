@@ -29,7 +29,7 @@ const KNOCKBACK = 0.05
 const PUNCH_MS = 280
 const DAMAGE = 14
 const CHAIR_DAMAGE = 30
-const CHAIR_GRAB_RANGE = 0.1
+const CHAIR_GRAB_RANGE = 0.16
 const HIT_COOLDOWN = 550
 const INTRO_MS = 2200
 
@@ -86,6 +86,8 @@ export const RageArena = ({
   const hpRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   const chair = useRef({ x: 0.5, y: 0.5, heldBy: null as string | null })
   const chairRef = useRef<HTMLDivElement>(null)
+  const chairMineRef = useRef(false)
+  const [chairHeldByMe, setChairHeldByMe] = useState(false)
   const me = useRef({
     x: seedX(myId),
     y: seedY(myId),
@@ -125,6 +127,8 @@ export const RageArena = ({
       b.y = 0.3 + ((i * 23) % 40) / 100
     })
     chair.current = { x: 0.5, y: 0.5, heldBy: null }
+    chairMineRef.current = false
+    setChairHeldByMe(false)
     lastHitFrom.current.clear()
     setPools([])
     setBloods([])
@@ -402,6 +406,12 @@ export const RageArena = ({
             ch.y = holder.y
           }
         }
+        const mine = ch.heldBy === myId
+        if (mine !== chairMineRef.current) {
+          chairMineRef.current = mine
+          setChairHeldByMe(mine)
+          if (mine) playBell()
+        }
       }
 
       if (now - lastSent.current > 50) {
@@ -642,7 +652,12 @@ export const RageArena = ({
             {/* Grabbable chair — punch it to pick it up; held chairs hit harder */}
             <div
               ref={chairRef}
-              className="pointer-events-none absolute left-0 top-0 select-none text-6xl will-change-transform drop-shadow-[0_3px_6px_rgba(0,0,0,0.7)]"
+              className={cn(
+                "pointer-events-none absolute left-0 top-0 select-none text-6xl will-change-transform",
+                chairHeldByMe
+                  ? "drop-shadow-[0_0_14px_rgba(248,113,113,0.95)]"
+                  : "drop-shadow-[0_3px_6px_rgba(0,0,0,0.7)]",
+              )}
               style={{ transition: "transform 0.05s linear" }}
             >
               🪑
@@ -734,9 +749,16 @@ export const RageArena = ({
       </AnimatePresence>
 
       <div className="relative z-10 flex flex-wrap items-center justify-center gap-3 px-4 py-3 text-center text-xs text-white/55">
-        <span className="hidden sm:inline">
-          WASD / arrows to move · Space to punch · drag on touch
-        </span>
+        {chairHeldByMe ? (
+          <span className="font-semibold text-red-300">
+            🪑 Chair grabbed — punches hit harder!
+          </span>
+        ) : (
+          <span className="hidden sm:inline">
+            WASD / arrows to move · Space to punch · drag on touch · punch the
+            🪑 to grab it
+          </span>
+        )}
         <button
           onPointerDown={() => {
             if (Date.now() > punchUntil.current) playPunch()
