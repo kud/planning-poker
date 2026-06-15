@@ -28,6 +28,8 @@ const ACCEL = 0.0016
 const KNOCKBACK = 0.05
 const PUNCH_MS = 280
 const DAMAGE = 14
+const CHAIR_DAMAGE = 30
+const CHAIR_GRAB_RANGE = 0.1
 const HIT_COOLDOWN = 550
 const INTRO_MS = 2200
 
@@ -82,6 +84,8 @@ export const RageArena = ({
   const containerRef = useRef<HTMLDivElement>(null)
   const nodeRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   const hpRefs = useRef<Map<string, HTMLDivElement>>(new Map())
+  const chair = useRef({ x: 0.5, y: 0.5, heldBy: null as string | null })
+  const chairRef = useRef<HTMLDivElement>(null)
   const me = useRef({
     x: seedX(myId),
     y: seedY(myId),
@@ -120,6 +124,7 @@ export const RageArena = ({
       b.x = 0.3 + ((i * 13) % 40) / 100
       b.y = 0.3 + ((i * 23) % 40) / 100
     })
+    chair.current = { x: 0.5, y: 0.5, heldBy: null }
     lastHitFrom.current.clear()
     setPools([])
     setBloods([])
@@ -244,6 +249,7 @@ export const RageArena = ({
         ax: number,
         ay: number,
         attackerId: string,
+        dmg: number,
       ) => {
         const key = `${attackerId}>${meta.id}`
         if (now - (lastHitFrom.current.get(key) ?? 0) < HIT_COOLDOWN) return
@@ -251,9 +257,10 @@ export const RageArena = ({
         const dx = v.x - ax
         const dy = v.y - ay
         const dist = Math.hypot(dx, dy) || 1
-        v.vx += (dx / dist) * KNOCKBACK
-        v.vy += (dy / dist) * KNOCKBACK
-        v.hp = Math.max(0, v.hp - DAMAGE)
+        const force = dmg > DAMAGE ? KNOCKBACK * 1.6 : KNOCKBACK
+        v.vx += (dx / dist) * force
+        v.vy += (dy / dist) * force
+        v.hp = Math.max(0, v.hp - dmg)
         spawnBlood(v.x, v.y)
         if (meta.isMe) playHit()
         // Death is permanent — bodies stay down until the arena restarts.
@@ -340,6 +347,22 @@ export const RageArena = ({
             .filter(([, p]) => p.punching && now - p.at < 400)
             .map(([id, p]) => ({ id, x: p.x, y: p.y })),
         ]
+
+        // Punching near a loose chair grabs it (locally controllable actors only)
+        const ch = chair.current
+        if (ch.heldBy === null) {
+          for (const a of punchers) {
+            const local = a.id === myId || a.id.startsWith("bot-")
+            if (
+              local &&
+              Math.hypot(ch.x - a.x, ch.y - a.y) < CHAIR_GRAB_RANGE
+            ) {
+              ch.heldBy = a.id
+              break
+            }
+          }
+        }
+
         const victims = [
           { v: m, meta: { id: myId, isMe: true, name: "You" } },
           ...bots.current.map((b) => ({
@@ -352,7 +375,31 @@ export const RageArena = ({
           for (const a of punchers) {
             if (a.id === meta.id) continue
             if (Math.hypot(v.x - a.x, v.y - a.y) < HIT_RANGE)
-              hurt(v, meta, a.x, a.y, a.id)
+              hurt(
+                v,
+                meta,
+                a.x,
+                a.y,
+                a.id,
+                a.id === ch.heldBy ? CHAIR_DAMAGE : DAMAGE,
+              )
+          }
+        }
+      }
+
+      // --- chair follows its holder; drops when the holder dies ---
+      {
+        const ch = chair.current
+        if (ch.heldBy) {
+          const holder =
+            ch.heldBy === myId
+              ? m
+              : bots.current.find((b) => b.id === ch.heldBy)
+          if (!holder || holder.hp <= 0) {
+            ch.heldBy = null
+          } else {
+            ch.x = clamp(holder.x + 0.045)
+            ch.y = holder.y
           }
         }
       }
@@ -397,6 +444,14 @@ export const RageArena = ({
             fill.style.width = `${Math.max(0, hp)}%`
             fill.style.background = hpColor(hp)
           }
+        }
+
+        const ch = chair.current
+        const chairNode = chairRef.current
+        if (chairNode) {
+          const held = ch.heldBy !== null
+          const swing = held && now < punchUntil.current ? -45 : held ? -15 : 0
+          chairNode.style.transform = `translate(${ch.x * rect.width}px, ${ch.y * rect.height}px) translate(-50%, -50%) rotate(${swing}deg)`
         }
       }
       raf = requestAnimationFrame(loop)
@@ -584,6 +639,15 @@ export const RageArena = ({
 
             {botList.map((b) => fighterNode(b.id, b.name, b.seed, false))}
 
+            {/* Grabbable chair — punch it to pick it up; held chairs hit harder */}
+            <div
+              ref={chairRef}
+              className="pointer-events-none absolute left-0 top-0 select-none text-6xl will-change-transform drop-shadow-[0_3px_6px_rgba(0,0,0,0.7)]"
+              style={{ transition: "transform 0.05s linear" }}
+            >
+              🪑
+            </div>
+
             {/* Blood splatter */}
             <AnimatePresence>
               {bloods.map((b) => (
@@ -624,40 +688,50 @@ export const RageArena = ({
                 </motion.div>
               )}
             </AnimatePresence>
-
-            {/* Intro: the felt table is hauled out of the ring, title slams in. */}
-            <AnimatePresence>
-              {intro && (
-                <motion.div
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.4 }}
-                  className="absolute inset-0 flex items-center justify-center overflow-hidden bg-black/55"
-                >
-                  <motion.div
-                    initial={{ x: "-100%" }}
-                    animate={{ x: "100%" }}
-                    transition={{ duration: 0.7, ease: "easeInOut" }}
-                    className="absolute inset-0 bg-gradient-to-r from-transparent via-red-600/50 to-transparent"
-                  />
-                  <motion.div
-                    initial={{ scale: 2.6, opacity: 0, rotate: -6 }}
-                    animate={{ scale: [2.6, 0.92, 1], opacity: [0, 1, 1] }}
-                    transition={{ duration: 0.55, delay: 0.5 }}
-                    className="absolute flex flex-col items-center gap-1"
-                  >
-                    <span className="text-4xl font-black uppercase tracking-[0.2em] text-red-500 drop-shadow-[0_0_24px_rgba(239,68,68,0.85)] sm:text-6xl">
-                      Rage Mode
-                    </span>
-                    <span className="text-xs uppercase tracking-[0.3em] text-white/60">
-                      Fight!
-                    </span>
-                  </motion.div>
-                </motion.div>
-              )}
-            </AnimatePresence>
           </div>
         </div>
       </div>
+
+      {/* Stage change — curtains part to reveal the arena */}
+      <AnimatePresence>
+        {intro && (
+          <motion.div
+            className="absolute inset-0 z-50 flex items-center justify-center"
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+          >
+            <motion.div
+              initial={{ x: 0 }}
+              animate={{ x: "-100%" }}
+              transition={{ duration: 0.9, ease: [0.7, 0, 0.3, 1], delay: 0.7 }}
+              className="absolute inset-y-0 left-0 w-1/2 border-r-2 border-red-700/40 bg-[linear-gradient(90deg,#0a0610,#1a0a12)] shadow-[inset_-20px_0_40px_rgba(0,0,0,0.6)]"
+            />
+            <motion.div
+              initial={{ x: 0 }}
+              animate={{ x: "100%" }}
+              transition={{ duration: 0.9, ease: [0.7, 0, 0.3, 1], delay: 0.7 }}
+              className="absolute inset-y-0 right-0 w-1/2 border-l-2 border-red-700/40 bg-[linear-gradient(270deg,#0a0610,#1a0a12)] shadow-[inset_20px_0_40px_rgba(0,0,0,0.6)]"
+            />
+            <motion.div
+              initial={{ scale: 2.2, opacity: 0, rotate: -6 }}
+              animate={{
+                scale: [2.2, 0.95, 1],
+                opacity: [0, 1, 1, 0],
+                rotate: [-6, 0, 0, 0],
+              }}
+              transition={{ duration: 1.2, times: [0, 0.25, 0.6, 1] }}
+              className="z-10 flex flex-col items-center gap-1"
+            >
+              <span className="text-5xl font-black uppercase tracking-[0.2em] text-red-500 drop-shadow-[0_0_30px_rgba(239,68,68,0.9)] sm:text-7xl">
+                Rage Mode
+              </span>
+              <span className="text-sm uppercase tracking-[0.35em] text-white/70">
+                Fight!
+              </span>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div className="relative z-10 flex flex-wrap items-center justify-center gap-3 px-4 py-3 text-center text-xs text-white/55">
         <span className="hidden sm:inline">
