@@ -238,8 +238,9 @@ export const playDice = () => {
 }
 
 export const playPunch = () => {
-  tone(150, 0.09, { type: "square", volume: 0.07, glideTo: 55 })
-  swish(0.07, 0.05)
+  tone(170, 0.12, { type: "square", volume: 0.13, glideTo: 50 })
+  tone(80, 0.16, { type: "sine", volume: 0.1, glideTo: 40 })
+  swish(0.08, 0.07)
 }
 
 export const playHit = () => {

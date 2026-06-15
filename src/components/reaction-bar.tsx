@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils"
 const QUICK_EMOJIS = ["👍", "😂", "😮", "🤯"]
 
 const MORE_EMOJIS = [
+  "🖕",
   "❤️",
   "🎉",
   "👏",

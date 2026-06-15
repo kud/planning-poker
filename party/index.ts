@@ -45,6 +45,7 @@ const freshState = (): RoomState => ({
   history: [],
   autoReveal: false,
   rageEnabled: false,
+  timer: null,
 })
 
 const clampText = (value: unknown, max = MAX_TEXT_LEN) =>
@@ -349,6 +350,50 @@ export default class PokerRoom implements Party.Server {
           this.state = { ...this.state, revealed: true }
         break
       }
+      case "set-timer": {
+        if (!isHost) return
+        const seconds =
+          typeof msg.seconds === "number" && Number.isFinite(msg.seconds)
+            ? Math.max(0, Math.min(3600, Math.floor(msg.seconds)))
+            : 0
+        this.state = {
+          ...this.state,
+          timer:
+            seconds > 0
+              ? { endsAt: Date.now() + seconds * 1000, duration: seconds }
+              : null,
+        }
+        break
+      }
+      case "break-request": {
+        const name =
+          this.state.participants[clientId]?.name ??
+          this.connToProfile.get(sender.id)?.name ??
+          "Someone"
+        this.room.broadcast(
+          JSON.stringify({
+            type: "break-requested",
+            from: clientId,
+            name,
+          } satisfies Message),
+        )
+        return
+      }
+      case "break-response": {
+        const name =
+          this.state.participants[clientId]?.name ??
+          this.connToProfile.get(sender.id)?.name ??
+          "Someone"
+        this.room.broadcast(
+          JSON.stringify({
+            type: "break-responded",
+            from: clientId,
+            name,
+            accept: !!msg.accept,
+          } satisfies Message),
+        )
+        return
+      }
       case "set-rage": {
         if (!isHost) return
         this.state = { ...this.state, rageEnabled: !!msg.enabled }
@@ -463,6 +508,7 @@ export default class PokerRoom implements Party.Server {
       revealed: false,
       speaker: null,
       spoken: [],
+      timer: null,
       participants: Object.fromEntries(
         Object.entries(this.state.participants).map(([id, p]) => [
           id,
