@@ -45,7 +45,7 @@ const freshState = (): RoomState => ({
   history: [],
   autoReveal: false,
   rageEnabled: false,
-  timer: null,
+  break: null,
   requireApproval: false,
   pending: {},
 })
@@ -382,49 +382,68 @@ export default class PokerRoom implements Party.Server {
           this.state = { ...this.state, revealed: true }
         break
       }
-      case "set-timer": {
-        if (!isHost) return
+      case "request-break": {
+        if (this.state.break) break
+        const name =
+          this.state.participants[clientId]?.name ??
+          this.connToProfile.get(sender.id)?.name ??
+          "Someone"
+        this.state = {
+          ...this.state,
+          break: {
+            status: "voting",
+            requesterName: name,
+            accepts: [clientId],
+            declines: [],
+            endsAt: null,
+          },
+        }
+        break
+      }
+      case "break-vote": {
+        const b = this.state.break
+        if (!b || b.status !== "voting") break
+        const accepts = b.accepts.filter((id) => id !== clientId)
+        const declines = b.declines.filter((id) => id !== clientId)
+        if (msg.accept) accepts.push(clientId)
+        else declines.push(clientId)
+        const total = Object.keys(this.state.participants).length
+        const needed = Math.floor(total / 2) + 1
+        if (accepts.length >= needed) {
+          // Majority said yes — start a 5-minute break the host can adjust.
+          this.state = {
+            ...this.state,
+            break: {
+              ...b,
+              status: "active",
+              accepts,
+              declines,
+              endsAt: Date.now() + 300_000,
+            },
+          }
+        } else if (declines.length >= needed) {
+          this.state = { ...this.state, break: null }
+        } else {
+          this.state = { ...this.state, break: { ...b, accepts, declines } }
+        }
+        break
+      }
+      case "set-break-time": {
+        if (!isHost || this.state.break?.status !== "active") break
         const seconds =
           typeof msg.seconds === "number" && Number.isFinite(msg.seconds)
             ? Math.max(0, Math.min(3600, Math.floor(msg.seconds)))
             : 0
         this.state = {
           ...this.state,
-          timer:
-            seconds > 0
-              ? { endsAt: Date.now() + seconds * 1000, duration: seconds }
-              : null,
+          break: { ...this.state.break, endsAt: Date.now() + seconds * 1000 },
         }
         break
       }
-      case "break-request": {
-        const name =
-          this.state.participants[clientId]?.name ??
-          this.connToProfile.get(sender.id)?.name ??
-          "Someone"
-        this.room.broadcast(
-          JSON.stringify({
-            type: "break-requested",
-            from: clientId,
-            name,
-          } satisfies Message),
-        )
-        return
-      }
-      case "break-response": {
-        const name =
-          this.state.participants[clientId]?.name ??
-          this.connToProfile.get(sender.id)?.name ??
-          "Someone"
-        this.room.broadcast(
-          JSON.stringify({
-            type: "break-responded",
-            from: clientId,
-            name,
-            accept: !!msg.accept,
-          } satisfies Message),
-        )
-        return
+      case "end-break": {
+        if (!isHost) return
+        this.state = { ...this.state, break: null }
+        break
       }
       case "set-approval": {
         if (!isHost) return
@@ -611,7 +630,6 @@ export default class PokerRoom implements Party.Server {
       revealed: false,
       speaker: null,
       spoken: [],
-      timer: null,
       participants: Object.fromEntries(
         Object.entries(this.state.participants).map(([id, p]) => [
           id,

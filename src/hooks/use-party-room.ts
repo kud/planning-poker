@@ -18,7 +18,7 @@ const normalizeState = (s: Partial<RoomState>): RoomState => ({
   history: s.history ?? [],
   autoReveal: s.autoReveal ?? false,
   rageEnabled: s.rageEnabled ?? false,
-  timer: s.timer ?? null,
+  break: s.break ?? null,
   requireApproval: s.requireApproval ?? false,
   pending: s.pending ?? {},
 })
@@ -82,13 +82,6 @@ export const usePartyRoom = ({
   const ragePlayers = useRef<Map<string, RagePlayer>>(new Map())
   const [rageInvite, setRageInvite] = useState<RageInvite | null>(null)
   const [rageRestart, setRageRestart] = useState(0)
-  const [breakRequest, setBreakRequest] = useState<{
-    from: string
-    name: string
-  } | null>(null)
-  const [breakResponses, setBreakResponses] = useState<
-    { from: string; name: string; accept: boolean }[]
-  >([])
 
   const socket = usePartySocket({
     host: PARTYKIT_HOST,
@@ -145,20 +138,6 @@ export const usePartyRoom = ({
         ragePlayers.current.clear()
         setRageRestart((n) => n + 1)
       }
-      if (msg.type === "break-requested") {
-        setBreakRequest({ from: msg.from, name: msg.name })
-        setBreakResponses([])
-      }
-      if (msg.type === "break-responded") {
-        setBreakResponses((current) =>
-          current.some((r) => r.from === msg.from)
-            ? current
-            : [
-                ...current,
-                { from: msg.from, name: msg.name, accept: msg.accept },
-              ],
-        )
-      }
       if (msg.type === "presence" && msg.clientId !== clientId) {
         const id = ++presenceId.current
         setPresenceEvents((current) => [
@@ -208,15 +187,11 @@ export const usePartyRoom = ({
     clearHistory: () => send({ type: "clear-history" }),
     setAutoReveal: (enabled: boolean) =>
       send({ type: "set-auto-reveal", enabled }),
-    setTimer: (seconds: number) => send({ type: "set-timer", seconds }),
-    requestBreak: () => send({ type: "break-request" }),
-    respondBreak: (accept: boolean) => send({ type: "break-response", accept }),
-    breakRequest,
-    breakResponses,
-    dismissBreak: () => {
-      setBreakRequest(null)
-      setBreakResponses([])
-    },
+    requestBreak: () => send({ type: "request-break" }),
+    voteBreak: (accept: boolean) => send({ type: "break-vote", accept }),
+    setBreakTime: (seconds: number) =>
+      send({ type: "set-break-time", seconds }),
+    endBreak: () => send({ type: "end-break" }),
     setApproval: (enabled: boolean) => send({ type: "set-approval", enabled }),
     admit: (clientId: string) => send({ type: "admit", clientId }),
     deny: (clientId: string) => send({ type: "deny", clientId }),

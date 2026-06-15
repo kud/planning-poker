@@ -20,8 +20,7 @@ import { TopicBar } from "@/components/topic-bar"
 import { SessionHistory } from "@/components/session-history"
 import { HostActions } from "@/components/host-actions"
 import { RageArena } from "@/components/rage-arena"
-import { RoundTimer } from "@/components/round-timer"
-import { BreakPrompt } from "@/components/break-prompt"
+import { BreakOverlay } from "@/components/break-overlay"
 import { Deck, RoomState } from "@/lib/types"
 import { computeVoteStats } from "@/lib/vote-stats"
 import { SettingsDialog } from "@/components/settings-dialog"
@@ -87,12 +86,10 @@ type Props = {
   onDismissRageInvite?: () => void
   rageRestart?: number
   onRequestRageRestart?: () => void
-  onSetTimer?: (seconds: number) => void
   onRequestBreak?: () => void
-  onRespondBreak?: (accept: boolean) => void
-  breakRequest?: { from: string; name: string } | null
-  breakResponses?: { from: string; name: string; accept: boolean }[]
-  onDismissBreak?: () => void
+  onVoteBreak?: (accept: boolean) => void
+  onSetBreakTime?: (seconds: number) => void
+  onEndBreak?: () => void
   onSetApproval?: (enabled: boolean) => void
   onAdmit?: (clientId: string) => void
   onDeny?: (clientId: string) => void
@@ -119,8 +116,8 @@ const revealQuip = (votes: string[]): Announcement => {
   if (votes.includes("☕"))
     return {
       emoji: "☕",
-      title: "Someone wants a breather",
-      sub: "Tap ☕ Break in the header to put it to a vote",
+      title: "Someone played the coffee card",
+      sub: "Not sure this one's estimatable",
     }
   if (numbers.length >= 1) {
     const top = Math.max(...numbers)
@@ -404,12 +401,10 @@ export const RoomView = ({
   onDismissRageInvite,
   rageRestart,
   onRequestRageRestart,
-  onSetTimer,
   onRequestBreak,
-  onRespondBreak,
-  breakRequest,
-  breakResponses,
-  onDismissBreak,
+  onVoteBreak,
+  onSetBreakTime,
+  onEndBreak,
   onSetApproval,
   onAdmit,
   onDeny,
@@ -457,7 +452,6 @@ export const RoomView = ({
     if (was === state.revealed) return
     if (state.revealed) playReveal()
     else playNewRound()
-    if (state.revealed && latestVotes.current.includes("☕")) setCoffeeRun(true)
     setAnnouncement(
       state.revealed
         ? revealQuip(latestVotes.current)
@@ -606,6 +600,11 @@ export const RoomView = ({
   useEffect(() => {
     if (!state.rageEnabled) setRageActive(false)
   }, [state.rageEnabled])
+
+  // Waiter walks in when a break starts.
+  useEffect(() => {
+    if (state.break?.status === "active") setCoffeeRun(true)
+  }, [state.break?.status])
 
   return (
     <MotionConfig reducedMotion="user">
@@ -812,23 +811,13 @@ export const RoomView = ({
         )}
 
         {onSetTopic && (
-          <div
-            className={`flex-none border-b ${s.header} flex flex-wrap items-center justify-center gap-x-4 gap-y-1`}
-          >
+          <div className={`flex-none border-b ${s.header}`}>
             <TopicBar
               topic={state.topic}
               isHost={isHost}
               theme={theme}
               onSetTopic={onSetTopic}
             />
-            {onSetTimer && (
-              <RoundTimer
-                timer={state.timer}
-                isHost={isHost}
-                theme={theme}
-                onSetTimer={onSetTimer}
-              />
-            )}
           </div>
         )}
 
@@ -1128,13 +1117,14 @@ export const RoomView = ({
         )}
 
         <AnimatePresence>
-          {breakRequest && onRespondBreak && onDismissBreak && (
-            <BreakPrompt
-              request={breakRequest}
-              responses={breakResponses ?? []}
+          {state.break && onVoteBreak && onSetBreakTime && onEndBreak && (
+            <BreakOverlay
+              state={state.break}
               myId={myId}
-              onRespond={onRespondBreak}
-              onDismiss={onDismissBreak}
+              isHost={isHost}
+              onVote={onVoteBreak}
+              onSetTime={onSetBreakTime}
+              onEnd={onEndBreak}
             />
           )}
         </AnimatePresence>

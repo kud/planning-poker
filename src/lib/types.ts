@@ -43,7 +43,13 @@ export type RoomState = {
   history: HistoryEntry[]
   autoReveal: boolean
   rageEnabled: boolean
-  timer: { endsAt: number; duration: number } | null
+  break: {
+    status: "voting" | "active"
+    requesterName: string
+    accepts: string[]
+    declines: string[]
+    endsAt: number | null
+  } | null
   requireApproval: boolean
   pending: Record<string, { id: string; name: string; avatar: string }>
 }
@@ -67,11 +73,10 @@ export type Message =
     }
   | { type: "clear-history" }
   | { type: "set-auto-reveal"; enabled: boolean }
-  | { type: "set-timer"; seconds: number }
-  | { type: "break-request" }
-  | { type: "break-requested"; from: string; name: string }
-  | { type: "break-response"; accept: boolean }
-  | { type: "break-responded"; from: string; name: string; accept: boolean }
+  | { type: "request-break" }
+  | { type: "break-vote"; accept: boolean }
+  | { type: "set-break-time"; seconds: number }
+  | { type: "end-break" }
   | { type: "set-approval"; enabled: boolean }
   | { type: "admit"; clientId: string }
   | { type: "deny"; clientId: string }

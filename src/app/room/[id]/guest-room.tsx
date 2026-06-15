@@ -89,12 +89,10 @@ const GuestRoomConnected = ({
     editHistory,
     clearHistory,
     setAutoReveal,
-    setTimer,
     requestBreak,
-    respondBreak,
-    breakRequest,
-    breakResponses,
-    dismissBreak,
+    voteBreak,
+    setBreakTime,
+    endBreak,
     setApproval,
     admit,
     deny,
@@ -205,12 +203,10 @@ const GuestRoomConnected = ({
         onEditHistory={editHistory}
         onClearHistory={clearHistory}
         onSetAutoReveal={setAutoReveal}
-        onSetTimer={setTimer}
         onRequestBreak={requestBreak}
-        onRespondBreak={respondBreak}
-        breakRequest={breakRequest}
-        breakResponses={breakResponses}
-        onDismissBreak={dismissBreak}
+        onVoteBreak={voteBreak}
+        onSetBreakTime={setBreakTime}
+        onEndBreak={endBreak}
         onSetApproval={setApproval}
         onAdmit={admit}
         onDeny={deny}
