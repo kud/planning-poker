@@ -138,14 +138,15 @@ export const playPurr = () => {
   for (let i = 0; i < length; i++) {
     const white = Math.random() * 2 - 1
     smoothed = 0.85 * smoothed + 0.15 * white
-    data[i] = smoothed * 1.4 + white * 0.12
+    data[i] = smoothed * 0.8 + white * 0.1
   }
   const source = audio.createBufferSource()
   source.buffer = buffer
 
+  // Cut the sub-bass that reads as a "godzilla" rumble rather than a purr.
   const highpass = audio.createBiquadFilter()
   highpass.type = "highpass"
-  highpass.frequency.value = 62
+  highpass.frequency.value = 110
   highpass.Q.value = 0.6
 
   const lowpass = audio.createBiquadFilter()
@@ -155,15 +156,15 @@ export const playPurr = () => {
 
   const throat = audio.createBiquadFilter()
   throat.type = "peaking"
-  throat.frequency.value = 95
+  throat.frequency.value = 130
   throat.Q.value = 0.8
-  throat.gain.value = 6
+  throat.gain.value = 2.5
 
   const pulse = audio.createGain()
-  pulse.gain.value = 0.74
+  pulse.gain.value = 0.5
   const lfo = audio.createOscillator()
   const lfoDepth = audio.createGain()
-  lfoDepth.gain.value = 0.22
+  lfoDepth.gain.value = 0.14
   lfo.connect(lfoDepth)
   lfoDepth.connect(pulse.gain)
 
@@ -176,8 +177,8 @@ export const playPurr = () => {
   const body = audio.createOscillator()
   const bodyGain = audio.createGain()
   body.type = "sine"
-  body.frequency.value = 95
-  bodyGain.gain.value = 0.16
+  body.frequency.value = 120
+  bodyGain.gain.value = 0.07
   body.connect(bodyGain)
   bodyGain.connect(pulse)
 
@@ -189,8 +190,8 @@ export const playPurr = () => {
   const EXHALE = 0.8
   let t = start
   for (let i = 0; i < 2; i++) {
-    envelope.gain.linearRampToValueAtTime(0.6, t + INHALE)
-    envelope.gain.linearRampToValueAtTime(0.1, t + INHALE + EXHALE)
+    envelope.gain.linearRampToValueAtTime(0.32, t + INHALE)
+    envelope.gain.linearRampToValueAtTime(0.06, t + INHALE + EXHALE)
     lowpass.frequency.setValueAtTime(280, t)
     lowpass.frequency.linearRampToValueAtTime(180, t + INHALE + EXHALE)
     t += INHALE + EXHALE + 0.05
@@ -234,4 +235,55 @@ export const playDice = () => {
   tone(2400, 0.03, { type: "square", volume: 0.025 })
   tone(2100, 0.03, { type: "square", volume: 0.025, delay: 0.09 })
   tone(2600, 0.03, { type: "square", volume: 0.02, delay: 0.19 })
+}
+
+export const playPunch = () => {
+  tone(150, 0.09, { type: "square", volume: 0.07, glideTo: 55 })
+  swish(0.07, 0.05)
+}
+
+export const playHit = () => {
+  tone(110, 0.13, { type: "sine", volume: 0.09, glideTo: 45 })
+  tone(220, 0.05, { type: "square", volume: 0.03 })
+}
+
+export const playBell = () => {
+  tone(880, 0.6, { type: "triangle", volume: 0.06 })
+  tone(1320, 0.5, { type: "triangle", volume: 0.03 })
+  tone(880, 0.6, { type: "triangle", volume: 0.05, delay: 0.18 })
+}
+
+// Crowd cheer — wide-band noise with a quick swell and a long, ragged decay.
+export const playCheer = (volume = 0.05) => {
+  const audio = audioContext()
+  if (!audio || isMuted()) return
+  const start = audio.currentTime
+  const duration = 1.4
+  const length = Math.ceil(audio.sampleRate * duration)
+  const buffer = audio.createBuffer(1, length, audio.sampleRate)
+  const data = buffer.getChannelData(0)
+  let smoothed = 0
+  for (let i = 0; i < length; i++) {
+    const white = Math.random() * 2 - 1
+    smoothed = 0.6 * smoothed + 0.4 * white
+    data[i] = smoothed
+  }
+  const source = audio.createBufferSource()
+  source.buffer = buffer
+
+  const bandpass = audio.createBiquadFilter()
+  bandpass.type = "bandpass"
+  bandpass.frequency.value = 1100
+  bandpass.Q.value = 0.5
+
+  const gain = audio.createGain()
+  gain.gain.setValueAtTime(0.0001, start)
+  gain.gain.linearRampToValueAtTime(volume, start + 0.18)
+  gain.gain.linearRampToValueAtTime(volume * 0.7, start + 0.6)
+  gain.gain.exponentialRampToValueAtTime(0.0001, start + duration)
+
+  source.connect(bandpass)
+  bandpass.connect(gain)
+  gain.connect(audio.destination)
+  source.start(start)
 }

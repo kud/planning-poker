@@ -1,5 +1,5 @@
 import type * as Party from "partykit/server"
-import type { Deck, Message, RoomState } from "../src/lib/types"
+import type { Deck, HistoryEntry, Message, RoomState } from "../src/lib/types"
 
 const defaultDeck = (): Deck => ({
   preset: "fibonacci",
@@ -29,31 +29,54 @@ const uniqueName = (
   return `${name} (${n})`
 }
 
-type PersistedData = { deck: Deck; hostSecret: string | null }
+type PersistedData = { state: RoomState; hostSecret: string | null }
 
 const ROOM_TTL_MS = 24 * 60 * 60 * 1000
+const MAX_TEXT_LEN = 120
+const MAX_HISTORY = 200
+
+const freshState = (): RoomState => ({
+  deck: defaultDeck(),
+  revealed: false,
+  participants: {},
+  speaker: null,
+  spoken: [],
+  topic: null,
+  history: [],
+  autoReveal: false,
+  rageEnabled: false,
+})
+
+const clampText = (value: unknown, max = MAX_TEXT_LEN) =>
+  typeof value === "string" ? value.slice(0, max) : ""
+
+const validDeck = (deck: unknown): deck is Deck => {
+  if (!deck || typeof deck !== "object") return false
+  const cards = (deck as Deck).cards
+  return (
+    Array.isArray(cards) &&
+    cards.length > 0 &&
+    cards.length <= 40 &&
+    cards.every((c) => typeof c?.value === "string" && c.value.length <= 12)
+  )
+}
 
 export default class PokerRoom implements Party.Server {
-  private state: RoomState = {
-    deck: defaultDeck(),
-    revealed: false,
-    participants: {},
-    speaker: null,
-    spoken: [],
-  }
+  private state: RoomState = freshState()
   private hostSecret: string | null = null
   private connToClientId = new Map<string, string>()
   private connToSecret = new Map<string, string>()
   private connToProfile = new Map<string, { name: string; avatar: string }>()
   private connCounts = new Map<string, number>()
   private lastReactionAt = new Map<string, number>()
+  private lastRageAt = new Map<string, number>()
 
   constructor(readonly room: Party.Room) {}
 
   async onStart() {
     const saved = await this.room.storage.get<PersistedData>("room")
     if (saved) {
-      this.state.deck = saved.deck
+      this.state = { ...freshState(), ...saved.state }
       this.hostSecret = saved.hostSecret
     }
   }
@@ -73,13 +96,7 @@ export default class PokerRoom implements Party.Server {
       return
     }
     await this.room.storage.deleteAll()
-    this.state = {
-      deck: defaultDeck(),
-      revealed: false,
-      participants: {},
-      speaker: null,
-      spoken: [],
-    }
+    this.state = freshState()
     this.hostSecret = null
   }
 
@@ -90,16 +107,14 @@ export default class PokerRoom implements Party.Server {
     const name = url.searchParams.get("name") ?? "Guest"
     const avatar = url.searchParams.get("avatar") ?? ""
 
+    const prevConnCount = this.connCounts.get(clientId) ?? 0
     this.connToClientId.set(conn.id, clientId)
     this.connToProfile.set(conn.id, { name, avatar })
     if (secret) this.connToSecret.set(conn.id, secret)
-    this.connCounts.set(clientId, (this.connCounts.get(clientId) ?? 0) + 1)
+    this.connCounts.set(clientId, prevConnCount + 1)
     this.scheduleCleanup()
 
-    if (secret && !this.hostSecret) {
-      this.hostSecret = secret
-      this.persist()
-    }
+    if (secret && !this.hostSecret) this.hostSecret = secret
 
     const isHost = !!secret && secret === this.hostSecret
     const existing = this.state.participants[clientId]
@@ -119,9 +134,20 @@ export default class PokerRoom implements Party.Server {
       },
     }
 
-    this.room.broadcast(
-      JSON.stringify({ type: "state", state: this.state } satisfies Message),
-    )
+    this.broadcastState()
+
+    if (prevConnCount === 0) {
+      const joined = this.state.participants[clientId]
+      this.room.broadcast(
+        JSON.stringify({
+          type: "presence",
+          event: "join",
+          clientId,
+          name: joined.name,
+          avatar: joined.avatar,
+        } satisfies Message),
+      )
+    }
   }
 
   private ensureParticipant(clientId: string, connId: string) {
@@ -155,6 +181,7 @@ export default class PokerRoom implements Party.Server {
     switch (msg.type) {
       case "vote": {
         if (this.state.revealed) return
+        if (!this.deckValues().has(msg.value)) return
         this.ensureParticipant(clientId, sender.id)
         this.state = {
           ...this.state,
@@ -166,6 +193,8 @@ export default class PokerRoom implements Party.Server {
             },
           },
         }
+        if (this.state.autoReveal && this.everyoneVoted())
+          this.state = { ...this.state, revealed: true }
         break
       }
       case "update-profile": {
@@ -175,7 +204,7 @@ export default class PokerRoom implements Party.Server {
             ([id]) => id !== clientId,
           ),
         )
-        const resolved = uniqueName(msg.name, excluded)
+        const resolved = uniqueName(clampText(msg.name) || "Guest", excluded)
         this.state = {
           ...this.state,
           participants: {
@@ -183,7 +212,7 @@ export default class PokerRoom implements Party.Server {
             [clientId]: {
               ...this.state.participants[clientId],
               name: resolved,
-              avatar: msg.avatar,
+              avatar: clampText(msg.avatar),
             },
           },
         }
@@ -192,24 +221,11 @@ export default class PokerRoom implements Party.Server {
       case "reveal": {
         if (!isHost) return
         this.state = { ...this.state, revealed: true }
-        this.persist()
         break
       }
       case "reset": {
         if (!isHost) return
-        this.state = {
-          ...this.state,
-          revealed: false,
-          speaker: null,
-          spoken: [],
-          participants: Object.fromEntries(
-            Object.entries(this.state.participants).map(([id, p]) => [
-              id,
-              { ...p, vote: null },
-            ]),
-          ),
-        }
-        this.persist()
+        this.state = this.clearedRound()
         break
       }
       case "roll-speaker": {
@@ -264,17 +280,134 @@ export default class PokerRoom implements Party.Server {
       }
       case "set-deck": {
         if (!isHost) return
+        if (!validDeck(msg.deck)) return
         this.state = { ...this.state, deck: msg.deck, revealed: false }
-        this.persist()
         break
+      }
+      case "set-topic": {
+        if (!isHost) return
+        const title = clampText(msg.title)
+        const url = this.safeUrl(msg.url)
+        this.state = {
+          ...this.state,
+          topic: title || url ? { title, url } : null,
+        }
+        break
+      }
+      case "save-round": {
+        if (!isHost) return
+        if (!this.deckValues().has(msg.estimate)) return
+        const topic = this.state.topic
+        const entry: HistoryEntry = {
+          id: crypto.randomUUID(),
+          title: topic?.title ?? "",
+          url: topic?.url ?? null,
+          estimate: msg.estimate,
+          at: Date.now(),
+        }
+        this.state = {
+          ...this.clearedRound(),
+          topic: null,
+          history: [...this.state.history, entry].slice(-MAX_HISTORY),
+        }
+        break
+      }
+      case "edit-history": {
+        if (!isHost) return
+        const title = clampText(msg.title)
+        const url = this.safeUrl(msg.url)
+        this.state = {
+          ...this.state,
+          history: this.state.history.map((entry) =>
+            entry.id === msg.id
+              ? {
+                  ...entry,
+                  title,
+                  url,
+                  estimate: this.deckValues().has(msg.estimate)
+                    ? msg.estimate
+                    : entry.estimate,
+                }
+              : entry,
+          ),
+        }
+        break
+      }
+      case "clear-history": {
+        if (!isHost) return
+        this.state = { ...this.state, history: [] }
+        break
+      }
+      case "set-auto-reveal": {
+        if (!isHost) return
+        this.state = { ...this.state, autoReveal: !!msg.enabled }
+        if (
+          this.state.autoReveal &&
+          !this.state.revealed &&
+          this.everyoneVoted()
+        )
+          this.state = { ...this.state, revealed: true }
+        break
+      }
+      case "set-rage": {
+        if (!isHost) return
+        this.state = { ...this.state, rageEnabled: !!msg.enabled }
+        break
+      }
+      case "rage-restart": {
+        if (!isHost || !this.state.rageEnabled) return
+        this.room.broadcast(
+          JSON.stringify({ type: "rage-restarted" } satisfies Message),
+        )
+        return
+      }
+      case "rage-invite": {
+        if (!this.state.rageEnabled) return
+        const name =
+          this.state.participants[clientId]?.name ??
+          this.connToProfile.get(sender.id)?.name ??
+          "Someone"
+        this.room.broadcast(
+          JSON.stringify({
+            type: "rage-invited",
+            from: clientId,
+            name,
+          } satisfies Message),
+        )
+        return
+      }
+      case "rage-move": {
+        if (!this.state.rageEnabled) return
+        if (
+          typeof msg.x !== "number" ||
+          typeof msg.y !== "number" ||
+          !Number.isFinite(msg.x) ||
+          !Number.isFinite(msg.y)
+        )
+          return
+        const now = Date.now()
+        if (now - (this.lastRageAt.get(sender.id) ?? 0) < 30) return
+        this.lastRageAt.set(sender.id, now)
+        this.room.broadcast(
+          JSON.stringify({
+            type: "rage",
+            from: clientId,
+            x: Math.max(0, Math.min(1, msg.x)),
+            y: Math.max(0, Math.min(1, msg.y)),
+            punching: !!msg.punching,
+            hp:
+              typeof msg.hp === "number" && Number.isFinite(msg.hp)
+                ? Math.max(0, Math.min(100, msg.hp))
+                : 100,
+          } satisfies Message),
+        )
+        return
       }
       default:
         return
     }
 
-    this.room.broadcast(
-      JSON.stringify({ type: "state", state: this.state } satisfies Message),
-    )
+    this.broadcastState()
   }
 
   onClose(conn: Party.Connection) {
@@ -291,7 +424,8 @@ export default class PokerRoom implements Party.Server {
     }
     this.connCounts.delete(clientId)
 
-    if (!this.state.participants[clientId]) return
+    const left = this.state.participants[clientId]
+    if (!left) return
     const participants = { ...this.state.participants }
     delete participants[clientId]
     this.state = {
@@ -299,15 +433,69 @@ export default class PokerRoom implements Party.Server {
       participants,
       speaker: this.state.speaker === clientId ? null : this.state.speaker,
     }
+    this.broadcastState()
     this.room.broadcast(
-      JSON.stringify({ type: "state", state: this.state } satisfies Message),
+      JSON.stringify({
+        type: "presence",
+        event: "leave",
+        clientId,
+        name: left.name,
+        avatar: left.avatar,
+      } satisfies Message),
     )
   }
 
-  private async persist() {
-    await this.room.storage.put<PersistedData>("room", {
-      deck: this.state.deck,
+  private deckValues() {
+    return new Set(this.state.deck.cards.map((c) => c.value))
+  }
+
+  private everyoneVoted() {
+    const ids = Object.keys(this.state.participants)
+    return (
+      ids.length > 0 &&
+      ids.every((id) => this.state.participants[id].vote !== null)
+    )
+  }
+
+  private clearedRound(): RoomState {
+    return {
+      ...this.state,
+      revealed: false,
+      speaker: null,
+      spoken: [],
+      participants: Object.fromEntries(
+        Object.entries(this.state.participants).map(([id, p]) => [
+          id,
+          { ...p, vote: null },
+        ]),
+      ),
+    }
+  }
+
+  private safeUrl(value: unknown): string | null {
+    const text = clampText(value, 2048).trim()
+    if (!text) return null
+    try {
+      const url = new URL(text)
+      return url.protocol === "http:" || url.protocol === "https:"
+        ? url.href
+        : null
+    } catch {
+      return null
+    }
+  }
+
+  private persist() {
+    void this.room.storage.put<PersistedData>("room", {
+      state: this.state,
       hostSecret: this.hostSecret,
     })
+  }
+
+  private broadcastState() {
+    this.persist()
+    this.room.broadcast(
+      JSON.stringify({ type: "state", state: this.state } satisfies Message),
+    )
   }
 }

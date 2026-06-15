@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { motion, AnimatePresence, animate } from "framer-motion"
 import { Participant } from "@/lib/types"
+import { computeVoteStats } from "@/lib/vote-stats"
 
 const CountUp = ({ value }: { value: number }) => {
   const [display, setDisplay] = useState(0)
@@ -27,21 +28,46 @@ type Props = {
   revealed: boolean
 }
 
-const average = (votes: number[]) =>
-  votes.length === 0 ? null : votes.reduce((a, b) => a + b, 0) / votes.length
+const StatChip = ({
+  label,
+  children,
+  delay,
+  highlight,
+}: {
+  label: string
+  children: React.ReactNode
+  delay: number
+  highlight?: boolean
+}) => (
+  <motion.div
+    initial={{ opacity: 0, y: 16, scale: 0.8 }}
+    animate={{ opacity: 1, y: 0, scale: 1 }}
+    transition={{ delay, type: "spring", stiffness: 400, damping: 24 }}
+    className={
+      highlight
+        ? "flex flex-col items-center rounded-xl border border-primary/50 bg-primary/20 px-4 py-2 min-w-[52px] shadow-[0_0_16px_rgba(99,102,241,0.3)]"
+        : "flex flex-col items-center rounded-xl border border-white/10 bg-white/8 px-4 py-2 min-w-[52px]"
+    }
+  >
+    {children}
+    <span
+      className={
+        highlight ? "text-[11px] text-indigo-400" : "text-[11px] text-slate-400"
+      }
+    >
+      {label}
+    </span>
+  </motion.div>
+)
 
 export const VoteSummary = ({ participants, revealed }: Props) => {
   const votes = Object.values(participants)
     .filter((p) => p.vote !== null)
     .map((p) => p.vote!)
 
-  const numericVotes = votes.map(Number).filter((n) => !isNaN(n))
-  const avg = average(numericVotes)
-
-  const tally = votes.reduce<Record<string, number>>((acc, v) => {
-    acc[v] = (acc[v] ?? 0) + 1
-    return acc
-  }, {})
+  const stats = computeVoteStats(votes)
+  const showSpread =
+    stats.spread !== null && stats.spread > 0 && stats.numericVotes.length > 1
 
   return (
     <AnimatePresence>
@@ -53,40 +79,35 @@ export const VoteSummary = ({ participants, revealed }: Props) => {
           transition={{ type: "spring", stiffness: 350, damping: 28 }}
           className="flex flex-wrap gap-2 items-center justify-center pt-2"
         >
-          {Object.entries(tally).map(([value, count], i) => (
-            <motion.div
-              key={value}
-              initial={{ opacity: 0, y: 16, scale: 0.8 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={{
-                delay: i * 0.06,
-                type: "spring",
-                stiffness: 400,
-                damping: 24,
-              }}
-              className="flex flex-col items-center rounded-xl border border-white/10 bg-white/8 px-4 py-2 min-w-[52px]"
-            >
+          {stats.tally.map(({ value, count }, i) => (
+            <StatChip key={value} label={`×${count}`} delay={i * 0.06}>
               <span className="text-xl font-bold text-white">{value}</span>
-              <span className="text-[11px] text-slate-400">×{count}</span>
-            </motion.div>
+            </StatChip>
           ))}
-          {avg !== null && (
-            <motion.div
-              initial={{ opacity: 0, y: 16, scale: 0.8 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={{
-                delay: Object.keys(tally).length * 0.06 + 0.06,
-                type: "spring",
-                stiffness: 400,
-                damping: 24,
-              }}
-              className="flex flex-col items-center rounded-xl border border-primary/50 bg-primary/20 px-4 py-2 min-w-[52px] shadow-[0_0_16px_rgba(99,102,241,0.3)]"
+          {stats.average !== null && (
+            <StatChip
+              label="avg"
+              delay={stats.tally.length * 0.06 + 0.06}
+              highlight
             >
               <span className="text-xl font-bold text-indigo-300">
-                <CountUp value={avg % 1 === 0 ? avg : Number(avg.toFixed(1))} />
+                <CountUp value={stats.average} />
               </span>
-              <span className="text-[11px] text-indigo-400">avg</span>
-            </motion.div>
+            </StatChip>
+          )}
+          {stats.median !== null && (
+            <StatChip label="median" delay={stats.tally.length * 0.06 + 0.12}>
+              <span className="text-xl font-bold text-slate-200">
+                {stats.median}
+              </span>
+            </StatChip>
+          )}
+          {showSpread && (
+            <StatChip label="spread" delay={stats.tally.length * 0.06 + 0.18}>
+              <span className="text-xl font-bold text-amber-300">
+                {stats.min}–{stats.max}
+              </span>
+            </StatChip>
           )}
         </motion.div>
       )}

@@ -73,8 +73,9 @@ const GuestRoomConnected = ({
 }) => {
   const {
     state,
-    connected,
+    status,
     reactions,
+    presenceEvents,
     react,
     vote,
     reveal,
@@ -82,6 +83,19 @@ const GuestRoomConnected = ({
     setDeck,
     rollSpeaker,
     updateProfile,
+    setTopic,
+    saveRound,
+    editHistory,
+    clearHistory,
+    setAutoReveal,
+    setRage,
+    sendRageMove,
+    inviteToRage,
+    ragePlayers,
+    rageInvite,
+    dismissRageInvite,
+    rageRestart,
+    requestRageRestart,
   } = usePartyRoom({
     roomId,
     name,
@@ -112,7 +126,7 @@ const GuestRoomConnected = ({
     setDeck(deck)
   }
 
-  if (!connected || !state) {
+  if (!state) {
     return (
       <div className="flex min-h-screen items-center justify-center flex-col gap-3">
         <p className="text-muted-foreground animate-pulse">
@@ -131,22 +145,44 @@ const GuestRoomConnected = ({
   const isHost = state.participants[clientId]?.isHost ?? false
 
   return (
-    <RoomView
-      state={state}
-      myId={clientId}
-      roomId={roomId}
-      isHost={isHost}
-      onVote={vote}
-      onReveal={reveal}
-      onReset={reset}
-      onSetDeck={applyDeck}
-      onRollSpeaker={rollSpeaker}
-      onReact={react}
-      reactions={reactions}
-      onCopyCode={copyCode}
-      onCopyLink={copyLink}
-      copiedMode={copiedMode}
-      onUpdateProfile={updateProfile}
-    />
+    <>
+      {status === "reconnecting" && (
+        <div className="fixed inset-x-0 top-0 z-50 flex items-center justify-center gap-2 bg-amber-500/95 px-3 py-1.5 text-sm font-medium text-amber-950 shadow-md">
+          <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-amber-900" />
+          Connection lost — reconnecting…
+        </div>
+      )}
+      <RoomView
+        state={state}
+        myId={clientId}
+        roomId={roomId}
+        isHost={isHost}
+        onVote={vote}
+        onReveal={reveal}
+        onReset={reset}
+        onSetDeck={applyDeck}
+        onRollSpeaker={rollSpeaker}
+        onReact={react}
+        onSetTopic={setTopic}
+        onSaveRound={saveRound}
+        onEditHistory={editHistory}
+        onClearHistory={clearHistory}
+        onSetAutoReveal={setAutoReveal}
+        onSetRage={setRage}
+        onRageMove={sendRageMove}
+        onInviteRage={inviteToRage}
+        ragePlayers={ragePlayers}
+        rageInvite={rageInvite}
+        onDismissRageInvite={dismissRageInvite}
+        rageRestart={rageRestart}
+        onRequestRageRestart={requestRageRestart}
+        reactions={reactions}
+        presenceEvents={presenceEvents}
+        onCopyCode={copyCode}
+        onCopyLink={copyLink}
+        copiedMode={copiedMode}
+        onUpdateProfile={updateProfile}
+      />
+    </>
   )
 }

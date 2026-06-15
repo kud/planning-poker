@@ -88,7 +88,7 @@ const DEALER_PIXELS: Array<[number, number, number, number, string]> = [
   [7, 18, 3, 1, SHOE],
 ]
 
-const DealerSprite = () => (
+export const DealerSprite = () => (
   <svg
     width={13 * PIXEL}
     height={19 * PIXEL}
