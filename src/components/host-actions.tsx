@@ -53,15 +53,34 @@ export const HostActions = ({
           Reveal cards
         </Button>
         {onSetAutoReveal && (
-          <label className="flex items-center gap-1.5 text-[11px] text-white/55 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={autoReveal}
-              onChange={(e) => onSetAutoReveal(e.target.checked)}
-              className="accent-emerald-500"
-            />
-            Auto-reveal when all voted
-          </label>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={autoReveal}
+            onClick={() => onSetAutoReveal(!autoReveal)}
+            title="Reveal automatically once everyone has voted"
+            className={cn(
+              "flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-medium tracking-wide transition-colors select-none",
+              autoReveal
+                ? "border-emerald-400/50 bg-emerald-500/15 text-emerald-200"
+                : "border-white/15 bg-white/5 text-white/55 hover:bg-white/10",
+            )}
+          >
+            <span
+              className={cn(
+                "relative h-3.5 w-6 rounded-full transition-colors",
+                autoReveal ? "bg-emerald-500/80" : "bg-white/25",
+              )}
+            >
+              <span
+                className={cn(
+                  "absolute top-0.5 h-2.5 w-2.5 rounded-full bg-white shadow-sm transition-all",
+                  autoReveal ? "left-3" : "left-0.5",
+                )}
+              />
+            </span>
+            Auto-reveal
+          </button>
         )}
       </>
     ) : (

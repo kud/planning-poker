@@ -6,6 +6,16 @@ import { CardValue, Deck, Message, RoomState } from "@/lib/types"
 
 export type ConnectionStatus = "connecting" | "connected" | "reconnecting"
 
+export type RagePlayer = {
+  x: number
+  y: number
+  punching: boolean
+  hp: number
+  at: number
+}
+
+export type RageInvite = { id: number; from: string; name: string }
+
 export type Reaction = {
   id: number
   from: string
@@ -52,6 +62,8 @@ export const usePartyRoom = ({
   const reactionId = useRef(0)
   const [presenceEvents, setPresenceEvents] = useState<PresenceEvent[]>([])
   const presenceId = useRef(0)
+  const ragePlayers = useRef<Map<string, RagePlayer>>(new Map())
+  const [rageInvite, setRageInvite] = useState<RageInvite | null>(null)
 
   const socket = usePartySocket({
     host: PARTYKIT_HOST,
@@ -87,6 +99,22 @@ export const usePartyRoom = ({
           () => setReactions((current) => current.filter((r) => r.id !== id)),
           REACTION_LIFETIME_MS,
         )
+      }
+      if (msg.type === "rage" && msg.from !== clientId) {
+        ragePlayers.current.set(msg.from, {
+          x: msg.x,
+          y: msg.y,
+          punching: msg.punching,
+          hp: msg.hp,
+          at: Date.now(),
+        })
+      }
+      if (msg.type === "rage-invited" && msg.from !== clientId) {
+        setRageInvite({
+          id: ++presenceId.current,
+          from: msg.from,
+          name: msg.name,
+        })
       }
       if (msg.type === "presence" && msg.clientId !== clientId) {
         const id = ++presenceId.current
@@ -128,8 +156,21 @@ export const usePartyRoom = ({
     setTopic: (title: string, url: string | null) =>
       send({ type: "set-topic", title, url }),
     saveRound: (estimate: CardValue) => send({ type: "save-round", estimate }),
+    editHistory: (
+      id: string,
+      title: string,
+      url: string | null,
+      estimate: CardValue,
+    ) => send({ type: "edit-history", id, title, url, estimate }),
     clearHistory: () => send({ type: "clear-history" }),
     setAutoReveal: (enabled: boolean) =>
       send({ type: "set-auto-reveal", enabled }),
+    setRage: (enabled: boolean) => send({ type: "set-rage", enabled }),
+    inviteToRage: () => send({ type: "rage-invite" }),
+    sendRageMove: (x: number, y: number, punching: boolean, hp: number) =>
+      send({ type: "rage-move", x, y, punching, hp }),
+    ragePlayers,
+    rageInvite,
+    dismissRageInvite: () => setRageInvite(null),
   }
 }

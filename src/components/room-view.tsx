@@ -18,6 +18,7 @@ import { VoteSummary } from "@/components/vote-summary"
 import { TopicBar } from "@/components/topic-bar"
 import { SessionHistory } from "@/components/session-history"
 import { HostActions } from "@/components/host-actions"
+import { RageArena } from "@/components/rage-arena"
 import { Deck, RoomState } from "@/lib/types"
 import { computeVoteStats } from "@/lib/vote-stats"
 import { SettingsDialog } from "@/components/settings-dialog"
@@ -28,7 +29,13 @@ import { PixelWaiter } from "@/components/pixel-waiter"
 import { ReactionBar } from "@/components/reaction-bar"
 import { FloatingReactions } from "@/components/floating-reactions"
 import { PresenceToasts } from "@/components/presence-toasts"
-import type { Reaction, PresenceEvent } from "@/hooks/use-party-room"
+import type {
+  Reaction,
+  PresenceEvent,
+  RagePlayer,
+  RageInvite,
+} from "@/hooks/use-party-room"
+import type { MutableRefObject } from "react"
 import {
   isMuted,
   setMuted,
@@ -60,8 +67,20 @@ type Props = {
   onReact?: (emoji: string) => void
   onSetTopic?: (title: string, url: string | null) => void
   onSaveRound?: (estimate: string) => void
+  onEditHistory?: (
+    id: string,
+    title: string,
+    url: string | null,
+    estimate: string,
+  ) => void
   onClearHistory?: () => void
   onSetAutoReveal?: (enabled: boolean) => void
+  onSetRage?: (enabled: boolean) => void
+  onRageMove?: (x: number, y: number, punching: boolean, hp: number) => void
+  onInviteRage?: () => void
+  ragePlayers?: MutableRefObject<Map<string, RagePlayer>>
+  rageInvite?: RageInvite | null
+  onDismissRageInvite?: () => void
   reactions?: Reaction[]
   presenceEvents?: PresenceEvent[]
 }
@@ -344,12 +363,20 @@ export const RoomView = ({
   onReact,
   onSetTopic,
   onSaveRound,
+  onEditHistory,
   onClearHistory,
   onSetAutoReveal,
+  onSetRage,
+  onRageMove,
+  onInviteRage,
+  ragePlayers,
+  rageInvite,
+  onDismissRageInvite,
   reactions,
   presenceEvents,
 }: Props) => {
   const [theme, setTheme] = useState<Theme>("dark")
+  const [rageActive, setRageActive] = useState(false)
   const [flyingCard, setFlyingCard] = useState<{
     value: string
     label?: string
@@ -526,6 +553,10 @@ export const RoomView = ({
     }
   }, [state.revealed, isConsensus, reduceMotion])
 
+  useEffect(() => {
+    if (!state.rageEnabled) setRageActive(false)
+  }, [state.rageEnabled])
+
   return (
     <MotionConfig reducedMotion="user">
       <div
@@ -595,10 +626,41 @@ export const RoomView = ({
             {onClearHistory && (
               <SessionHistory
                 history={state.history}
+                deck={state.deck}
                 isHost={isHost}
                 onClear={onClearHistory}
+                onEdit={onEditHistory}
                 triggerClassName={`border text-xs ${s.themeBtn}`}
               />
+            )}
+            {isHost && onSetRage && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onSetRage(!state.rageEnabled)}
+                title="Toggle whether the Rage Mode brawl is available to the room"
+                className={cn(
+                  "border text-xs",
+                  state.rageEnabled
+                    ? "border-red-400/50 bg-red-500/15 text-red-300 hover:bg-red-500/25 hover:text-red-200 dark:hover:bg-red-500/25"
+                    : s.themeBtn,
+                )}
+              >
+                🔥 Rage {state.rageEnabled ? "on" : "off"}
+              </Button>
+            )}
+            {state.rageEnabled && onRageMove && ragePlayers && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  onInviteRage?.()
+                  setRageActive(true)
+                }}
+                className="border border-red-400/50 bg-red-500/20 text-xs font-semibold text-red-100 hover:bg-red-500/30 hover:text-white dark:hover:bg-red-500/30"
+              >
+                👊 Brawl
+              </Button>
             )}
             {onUpdateProfile && (
               <SettingsDialog
@@ -922,6 +984,52 @@ export const RoomView = ({
         {presenceEvents && (
           <PresenceToasts events={presenceEvents} theme={theme} />
         )}
+
+        {rageActive && state.rageEnabled && onRageMove && ragePlayers && (
+          <RageArena
+            myId={myId}
+            participants={state.participants}
+            ragePlayers={ragePlayers}
+            onMove={onRageMove}
+            onExit={() => setRageActive(false)}
+          />
+        )}
+
+        <AnimatePresence>
+          {rageInvite && !rageActive && state.rageEnabled && (
+            <motion.div
+              initial={{ opacity: 0, y: 24, scale: 0.92 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 24, scale: 0.92 }}
+              transition={{ type: "spring", stiffness: 360, damping: 26 }}
+              className="fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-2xl border-2 border-red-400/50 bg-[#140a10]/95 px-4 py-3 shadow-[0_0_36px_rgba(239,68,68,0.35)] backdrop-blur-md"
+            >
+              <span className="text-2xl">🔥</span>
+              <span className="text-sm font-medium text-red-50">
+                <span className="font-bold">{rageInvite.name}</span> started a
+                brawl!
+              </span>
+              <Button
+                size="sm"
+                onClick={() => {
+                  onDismissRageInvite?.()
+                  setRageActive(true)
+                }}
+                className="border border-red-400/50 bg-red-600/80 text-white hover:bg-red-600"
+              >
+                👊 Join the fight
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => onDismissRageInvite?.()}
+                className="text-white/60 hover:text-white"
+              >
+                Stay on the bench
+              </Button>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Dealer announcements on mobile — the pixel dealer handles desktop */}
         <AnimatePresence>

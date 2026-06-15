@@ -13,13 +13,19 @@ export const toMarkdown = (history: HistoryEntry[]) => {
   return ["| Topic | Estimate |", "| --- | --- |", ...rows].join("\n")
 }
 
+const isoDate = (ms: number) => {
+  const date = new Date(ms)
+  return Number.isNaN(date.getTime()) ? "" : date.toISOString()
+}
+
 export const toCsv = (history: HistoryEntry[]) => {
-  const header = "Topic,Link,Estimate"
+  const header = "Topic,Link,Estimate,Date"
   const rows = history.map((e) =>
     [
       escapeCsv(e.title || "Untitled"),
       escapeCsv(e.url ?? ""),
       escapeCsv(e.estimate),
+      escapeCsv(isoDate(e.at)),
     ].join(","),
   )
   return [header, ...rows].join("\n")

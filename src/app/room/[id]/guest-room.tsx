@@ -85,8 +85,15 @@ const GuestRoomConnected = ({
     updateProfile,
     setTopic,
     saveRound,
+    editHistory,
     clearHistory,
     setAutoReveal,
+    setRage,
+    sendRageMove,
+    inviteToRage,
+    ragePlayers,
+    rageInvite,
+    dismissRageInvite,
   } = usePartyRoom({
     roomId,
     name,
@@ -156,8 +163,15 @@ const GuestRoomConnected = ({
         onReact={react}
         onSetTopic={setTopic}
         onSaveRound={saveRound}
+        onEditHistory={editHistory}
         onClearHistory={clearHistory}
         onSetAutoReveal={setAutoReveal}
+        onSetRage={setRage}
+        onRageMove={sendRageMove}
+        onInviteRage={inviteToRage}
+        ragePlayers={ragePlayers}
+        rageInvite={rageInvite}
+        onDismissRageInvite={dismissRageInvite}
         reactions={reactions}
         presenceEvents={presenceEvents}
         onCopyCode={copyCode}

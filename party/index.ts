@@ -44,6 +44,7 @@ const freshState = (): RoomState => ({
   topic: null,
   history: [],
   autoReveal: false,
+  rageEnabled: false,
 })
 
 const clampText = (value: unknown, max = MAX_TEXT_LEN) =>
@@ -68,6 +69,7 @@ export default class PokerRoom implements Party.Server {
   private connToProfile = new Map<string, { name: string; avatar: string }>()
   private connCounts = new Map<string, number>()
   private lastReactionAt = new Map<string, number>()
+  private lastRageAt = new Map<string, number>()
 
   constructor(readonly room: Party.Room) {}
 
@@ -310,6 +312,27 @@ export default class PokerRoom implements Party.Server {
         }
         break
       }
+      case "edit-history": {
+        if (!isHost) return
+        const title = clampText(msg.title)
+        const url = this.safeUrl(msg.url)
+        this.state = {
+          ...this.state,
+          history: this.state.history.map((entry) =>
+            entry.id === msg.id
+              ? {
+                  ...entry,
+                  title,
+                  url,
+                  estimate: this.deckValues().has(msg.estimate)
+                    ? msg.estimate
+                    : entry.estimate,
+                }
+              : entry,
+          ),
+        }
+        break
+      }
       case "clear-history": {
         if (!isHost) return
         this.state = { ...this.state, history: [] }
@@ -325,6 +348,53 @@ export default class PokerRoom implements Party.Server {
         )
           this.state = { ...this.state, revealed: true }
         break
+      }
+      case "set-rage": {
+        if (!isHost) return
+        this.state = { ...this.state, rageEnabled: !!msg.enabled }
+        break
+      }
+      case "rage-invite": {
+        if (!this.state.rageEnabled) return
+        const name =
+          this.state.participants[clientId]?.name ??
+          this.connToProfile.get(sender.id)?.name ??
+          "Someone"
+        this.room.broadcast(
+          JSON.stringify({
+            type: "rage-invited",
+            from: clientId,
+            name,
+          } satisfies Message),
+        )
+        return
+      }
+      case "rage-move": {
+        if (!this.state.rageEnabled) return
+        if (
+          typeof msg.x !== "number" ||
+          typeof msg.y !== "number" ||
+          !Number.isFinite(msg.x) ||
+          !Number.isFinite(msg.y)
+        )
+          return
+        const now = Date.now()
+        if (now - (this.lastRageAt.get(sender.id) ?? 0) < 30) return
+        this.lastRageAt.set(sender.id, now)
+        this.room.broadcast(
+          JSON.stringify({
+            type: "rage",
+            from: clientId,
+            x: Math.max(0, Math.min(1, msg.x)),
+            y: Math.max(0, Math.min(1, msg.y)),
+            punching: !!msg.punching,
+            hp:
+              typeof msg.hp === "number" && Number.isFinite(msg.hp)
+                ? Math.max(0, Math.min(100, msg.hp))
+                : 100,
+          } satisfies Message),
+        )
+        return
       }
       default:
         return

@@ -57,14 +57,21 @@ describe("toMarkdown", () => {
 
 describe("toCsv", () => {
   it("always outputs header row", () => {
-    expect(toCsv([])).toBe("Topic,Link,Estimate")
+    expect(toCsv([])).toBe("Topic,Link,Estimate,Date")
   })
 
   it("outputs a data row for a basic entry", () => {
     const result = toCsv([
-      makeEntry({ title: "Story", url: null, estimate: "5" }),
+      makeEntry({ title: "Story", url: null, estimate: "5", at: 0 }),
     ])
-    expect(result).toBe("Topic,Link,Estimate\nStory,,5")
+    expect(result).toBe(
+      "Topic,Link,Estimate,Date\nStory,,5,1970-01-01T00:00:00.000Z",
+    )
+  })
+
+  it("includes an ISO 8601 date column for machine/AI parsing", () => {
+    const result = toCsv([makeEntry({ at: 1_700_000_000_000 })])
+    expect(result).toContain("2023-11-14T22:13:20.000Z")
   })
 
   it("includes url in the link column", () => {
