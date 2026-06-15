@@ -90,10 +90,11 @@ export default class PokerRoom implements Party.Server {
     const name = url.searchParams.get("name") ?? "Guest"
     const avatar = url.searchParams.get("avatar") ?? ""
 
+    const prevConnCount = this.connCounts.get(clientId) ?? 0
     this.connToClientId.set(conn.id, clientId)
     this.connToProfile.set(conn.id, { name, avatar })
     if (secret) this.connToSecret.set(conn.id, secret)
-    this.connCounts.set(clientId, (this.connCounts.get(clientId) ?? 0) + 1)
+    this.connCounts.set(clientId, prevConnCount + 1)
     this.scheduleCleanup()
 
     if (secret && !this.hostSecret) {
@@ -122,6 +123,19 @@ export default class PokerRoom implements Party.Server {
     this.room.broadcast(
       JSON.stringify({ type: "state", state: this.state } satisfies Message),
     )
+
+    if (prevConnCount === 0) {
+      const joined = this.state.participants[clientId]
+      this.room.broadcast(
+        JSON.stringify({
+          type: "presence",
+          event: "join",
+          clientId,
+          name: joined.name,
+          avatar: joined.avatar,
+        } satisfies Message),
+      )
+    }
   }
 
   private ensureParticipant(clientId: string, connId: string) {
@@ -291,7 +305,8 @@ export default class PokerRoom implements Party.Server {
     }
     this.connCounts.delete(clientId)
 
-    if (!this.state.participants[clientId]) return
+    const left = this.state.participants[clientId]
+    if (!left) return
     const participants = { ...this.state.participants }
     delete participants[clientId]
     this.state = {
@@ -301,6 +316,15 @@ export default class PokerRoom implements Party.Server {
     }
     this.room.broadcast(
       JSON.stringify({ type: "state", state: this.state } satisfies Message),
+    )
+    this.room.broadcast(
+      JSON.stringify({
+        type: "presence",
+        event: "leave",
+        clientId,
+        name: left.name,
+        avatar: left.avatar,
+      } satisfies Message),
     )
   }
 

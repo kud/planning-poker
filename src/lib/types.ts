@@ -38,3 +38,10 @@ export type Message =
   | { type: "roll-speaker" }
   | { type: "react"; emoji: string }
   | { type: "reaction"; from: string; name: string; emoji: string }
+  | {
+      type: "presence"
+      event: "join" | "leave"
+      clientId: string
+      name: string
+      avatar: string
+    }

@@ -75,6 +75,7 @@ const GuestRoomConnected = ({
     state,
     connected,
     reactions,
+    presenceEvents,
     react,
     vote,
     reveal,
@@ -143,6 +144,7 @@ const GuestRoomConnected = ({
       onRollSpeaker={rollSpeaker}
       onReact={react}
       reactions={reactions}
+      presenceEvents={presenceEvents}
       onCopyCode={copyCode}
       onCopyLink={copyLink}
       copiedMode={copiedMode}

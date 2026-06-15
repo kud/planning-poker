@@ -18,7 +18,8 @@ import { PixelDealer } from "@/components/pixel-dealer"
 import { PixelWaiter } from "@/components/pixel-waiter"
 import { ReactionBar } from "@/components/reaction-bar"
 import { FloatingReactions } from "@/components/floating-reactions"
-import type { Reaction } from "@/hooks/use-party-room"
+import { PresenceToasts } from "@/components/presence-toasts"
+import type { Reaction, PresenceEvent } from "@/hooks/use-party-room"
 import {
   isMuted,
   setMuted,
@@ -49,6 +50,7 @@ type Props = {
   onRollSpeaker?: () => void
   onReact?: (emoji: string) => void
   reactions?: Reaction[]
+  presenceEvents?: PresenceEvent[]
 }
 
 export type Announcement = { emoji: string; title: string; sub: string }
@@ -328,6 +330,7 @@ export const RoomView = ({
   onRollSpeaker,
   onReact,
   reactions,
+  presenceEvents,
 }: Props) => {
   const [theme, setTheme] = useState<Theme>("dark")
   const [flyingCard, setFlyingCard] = useState<{
@@ -903,6 +906,10 @@ export const RoomView = ({
       <OnboardingHints isHost={isHost} />
 
       {reactions && <FloatingReactions reactions={reactions} />}
+
+      {presenceEvents && (
+        <PresenceToasts events={presenceEvents} theme={theme} />
+      )}
 
       {/* Dealer announcements on mobile — the pixel dealer handles desktop */}
       <AnimatePresence>

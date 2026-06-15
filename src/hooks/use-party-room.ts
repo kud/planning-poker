@@ -11,7 +11,16 @@ export type Reaction = {
   emoji: string
 }
 
+export type PresenceEvent = {
+  id: number
+  event: "join" | "leave"
+  clientId: string
+  name: string
+  avatar: string
+}
+
 const REACTION_LIFETIME_MS = 4000
+const PRESENCE_LIFETIME_MS = 4500
 
 const PARTYKIT_HOST =
   process.env.NEXT_PUBLIC_PARTYKIT_HOST ??
@@ -38,6 +47,8 @@ export const usePartyRoom = ({
   const [connected, setConnected] = useState(false)
   const [reactions, setReactions] = useState<Reaction[]>([])
   const reactionId = useRef(0)
+  const [presenceEvents, setPresenceEvents] = useState<PresenceEvent[]>([])
+  const presenceId = useRef(0)
 
   const socket = usePartySocket({
     host: PARTYKIT_HOST,
@@ -68,6 +79,24 @@ export const usePartyRoom = ({
           REACTION_LIFETIME_MS,
         )
       }
+      if (msg.type === "presence" && msg.clientId !== clientId) {
+        const id = ++presenceId.current
+        setPresenceEvents((current) => [
+          ...current,
+          {
+            id,
+            event: msg.event,
+            clientId: msg.clientId,
+            name: msg.name,
+            avatar: msg.avatar,
+          },
+        ])
+        setTimeout(
+          () =>
+            setPresenceEvents((current) => current.filter((p) => p.id !== id)),
+          PRESENCE_LIFETIME_MS,
+        )
+      }
     },
   })
 
@@ -77,6 +106,7 @@ export const usePartyRoom = ({
     state,
     connected,
     reactions,
+    presenceEvents,
     react: (emoji: string) => send({ type: "react", emoji }),
     vote: (value: string) => send({ type: "vote", value }),
     reveal: () => send({ type: "reveal" }),
