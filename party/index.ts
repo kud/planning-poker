@@ -392,6 +392,7 @@ export default class PokerRoom implements Party.Server {
           ...this.state,
           break: {
             status: "voting",
+            requesterId: clientId,
             requesterName: name,
             accepts: [clientId],
             declines: [],
@@ -441,7 +442,8 @@ export default class PokerRoom implements Party.Server {
         break
       }
       case "end-break": {
-        if (!isHost) return
+        // Host can always end it; the requester can cancel their own.
+        if (!isHost && this.state.break?.requesterId !== clientId) return
         this.state = { ...this.state, break: null }
         break
       }

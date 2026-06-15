@@ -131,69 +131,46 @@ const LandingForm = () => {
           ))}
         </div>
 
-        <motion.div
-          key={mode}
-          initial={{ opacity: 0, x: mode === "create" ? -12 : 12 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.18 }}
+        {/* One form, fixed layout — the room-code slot is always reserved so
+            switching Create/Join never changes the card height. */}
+        <form
+          onSubmit={mode === "create" ? handleCreate : handleJoin}
+          className="flex flex-col gap-3"
         >
-          {mode === "create" ? (
-            <form onSubmit={handleCreate} className="flex flex-col gap-3">
-              <Input
-                placeholder="Your name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                autoFocus
-              />
-              <AvatarPicker
-                options={avatarOptions}
-                selected={avatar}
-                onSelect={setAvatar}
-                onShuffle={shuffleAvatars}
-              />
-              <Button
-                type="submit"
-                className={cn(
-                  "w-full",
-                  !name.trim() && "opacity-50 pointer-events-none",
-                )}
-              >
-                Create room
-              </Button>
-            </form>
-          ) : (
-            <form onSubmit={handleJoin} className="flex flex-col gap-3">
-              <Input
-                placeholder="Your name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                autoFocus
-              />
-              <Input
-                placeholder="Room code"
-                value={roomId}
-                onChange={(e) => setRoomId(e.target.value.toUpperCase())}
-                className="font-mono"
-              />
-              <AvatarPicker
-                options={avatarOptions}
-                selected={avatar}
-                onSelect={setAvatar}
-                onShuffle={shuffleAvatars}
-              />
-              <Button
-                type="submit"
-                className={cn(
-                  "w-full",
-                  (!name.trim() || !roomId.trim()) &&
-                    "opacity-50 pointer-events-none",
-                )}
-              >
-                Join room
-              </Button>
-            </form>
-          )}
-        </motion.div>
+          <Input
+            placeholder="Your name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            autoFocus
+          />
+          <Input
+            placeholder="Room code"
+            value={roomId}
+            onChange={(e) => setRoomId(e.target.value.toUpperCase())}
+            className={cn(
+              "font-mono",
+              mode === "create" && "invisible pointer-events-none",
+            )}
+            tabIndex={mode === "create" ? -1 : 0}
+            aria-hidden={mode === "create"}
+          />
+          <AvatarPicker
+            options={avatarOptions}
+            selected={avatar}
+            onSelect={setAvatar}
+            onShuffle={shuffleAvatars}
+          />
+          <Button
+            type="submit"
+            className={cn(
+              "w-full",
+              (!name.trim() || (mode === "join" && !roomId.trim())) &&
+                "opacity-50 pointer-events-none",
+            )}
+          >
+            {mode === "create" ? "Create room" : "Join room"}
+          </Button>
+        </form>
 
         <p className="text-xs text-center text-muted-foreground">
           Free · real-time · no account

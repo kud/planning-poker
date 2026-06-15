@@ -74,11 +74,22 @@ export const BreakOverlay = ({
               size="sm"
               variant="ghost"
               onClick={() => onVote(false)}
-              className="text-white/60 hover:text-white"
+              className="text-amber-100/80 hover:bg-white/15 hover:text-white dark:hover:bg-white/15"
             >
               Decline
             </Button>
           </>
+        )}
+        {(isHost || state.requesterId === myId) && (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={onEnd}
+            title="Cancel this break request"
+            className="text-amber-100/80 hover:bg-white/15 hover:text-white dark:hover:bg-white/15"
+          >
+            Cancel
+          </Button>
         )}
       </motion.div>
     )

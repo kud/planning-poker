@@ -45,6 +45,7 @@ export type RoomState = {
   rageEnabled: boolean
   break: {
     status: "voting" | "active"
+    requesterId: string
     requesterName: string
     accepts: string[]
     declines: string[]

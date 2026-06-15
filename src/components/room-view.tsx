@@ -690,17 +690,6 @@ export const RoomView = ({
                 triggerClassName={`border text-xs ${s.themeBtn}`}
               />
             )}
-            {onRequestBreak && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onRequestBreak}
-                title="Ask the room for a coffee break"
-                className={`border text-xs ${s.themeBtn}`}
-              >
-                ☕ Break
-              </Button>
-            )}
             {isHost && onSetApproval && (
               <Button
                 variant="ghost"
@@ -1009,6 +998,17 @@ export const RoomView = ({
           )}
         >
           {onReact && <ReactionBar onReact={onReact} theme={theme} />}
+          {onRequestBreak && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onRequestBreak}
+              title="Ask the room for a coffee break"
+              className={`absolute left-2 top-2 z-20 border text-xs sm:left-4 ${s.themeBtn}`}
+            >
+              ☕ Break
+            </Button>
+          )}
           <div
             data-tour="hand"
             className="flex flex-col items-center gap-3 sm:gap-5"

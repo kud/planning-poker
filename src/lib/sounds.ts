@@ -282,26 +282,35 @@ export const playCheer = (volume = 0.05) => {
   const length = Math.ceil(audio.sampleRate * duration)
   const buffer = audio.createBuffer(1, length, audio.sampleRate)
   const data = buffer.getChannelData(0)
+  // Per the applause-synthesis literature (Peltola et al.): ~12 claps/sec,
+  // each a noise burst with a fast attack and a long (~250ms) decay, over a
+  // quiet roar floor. Resonance + band-limiting come from the filters below.
+  const triggerProb = 12 / audio.sampleRate
+  const clapDecay = Math.exp(-1 / (0.25 * audio.sampleRate)) // ~250ms
   let roar = 0
   let clap = 0
   for (let i = 0; i < length; i++) {
     const white = Math.random() * 2 - 1
-    roar = 0.72 * roar + 0.28 * white // warm, smoothed roar body
-    if (Math.random() < 0.0004) clap = 1 // ~18 soft claps/sec
-    clap *= 0.9994 // ~75ms decay — soft "pat", not a sharp tick
-    data[i] = roar * 0.5 + white * clap * 0.4
+    roar = 0.75 * roar + 0.25 * white
+    if (Math.random() < triggerProb) clap = 1
+    clap *= clapDecay
+    data[i] = roar * 0.32 + white * clap * 0.9
   }
   const source = audio.createBufferSource()
   source.buffer = buffer
 
-  // Warm voice band — no high sizzle (that read as a cricket/güiro).
-  const bandpass = audio.createBiquadFilter()
-  bandpass.type = "bandpass"
-  bandpass.frequency.value = 820
-  bandpass.Q.value = 0.6
+  // Roll off lows/highs, with a presence resonance ~1.8 kHz for the clap "pop".
+  const highpass = audio.createBiquadFilter()
+  highpass.type = "highpass"
+  highpass.frequency.value = 220
+  const presence = audio.createBiquadFilter()
+  presence.type = "peaking"
+  presence.frequency.value = 1800
+  presence.Q.value = 1
+  presence.gain.value = 6
   const lowpass = audio.createBiquadFilter()
   lowpass.type = "lowpass"
-  lowpass.frequency.value = 2200
+  lowpass.frequency.value = 7500
 
   const gain = audio.createGain()
   gain.gain.setValueAtTime(0.0001, start)
@@ -309,8 +318,9 @@ export const playCheer = (volume = 0.05) => {
   gain.gain.linearRampToValueAtTime(volume * 0.9, start + 2.1)
   gain.gain.exponentialRampToValueAtTime(0.0001, start + duration)
 
-  source.connect(bandpass)
-  bandpass.connect(lowpass)
+  source.connect(highpass)
+  highpass.connect(presence)
+  presence.connect(lowpass)
   lowpass.connect(gain)
   gain.connect(audio.destination)
   source.start(start)

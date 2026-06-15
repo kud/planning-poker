@@ -91,6 +91,7 @@ type Bot = {
   nextDecision: number
   tx: number
   ty: number
+  fistSide: "left" | "right"
 }
 
 // A static set of fake spectators to fill the tribunes (independent of who's
@@ -178,6 +179,7 @@ export const RageArena = ({
   const keys = useRef<Set<string>>(new Set())
   const target = useRef<{ x: number; y: number } | null>(null)
   const punchUntil = useRef(0)
+  const meFistSide = useRef<"left" | "right">("left")
   const spaceHeld = useRef(false)
   const spaceDownAt = useRef(0)
   const lastSent = useRef(0)
@@ -255,6 +257,7 @@ export const RageArena = ({
       nextDecision: 0,
       tx: 0.5,
       ty: 0.5,
+      fistSide: "left",
     })
     setBotList(
       bots.current.map((b) => ({ id: b.id, name: b.name, seed: b.seed })),
@@ -408,6 +411,7 @@ export const RageArena = ({
         if (!spaceHeld.current) {
           spaceHeld.current = true
           spaceDownAt.current = Date.now()
+          meFistSide.current = Math.random() < 0.5 ? "left" : "right"
           playPunch()
           punchUntil.current = Date.now() + PUNCH_MS
         }
@@ -561,7 +565,10 @@ export const RageArena = ({
               bot.tx = t.x
               bot.ty = t.y
             }
-            if (Math.random() < 0.6) bot.punchUntil = now + PUNCH_MS
+            if (Math.random() < 0.6) {
+              bot.punchUntil = now + PUNCH_MS
+              bot.fistSide = Math.random() < 0.5 ? "left" : "right"
+            }
           }
           bot.vx += (bot.tx - bot.x) * 0.011 + (Math.random() - 0.5) * 0.001
           bot.vy += (bot.ty - bot.y) * 0.011 + (Math.random() - 0.5) * 0.001
@@ -584,8 +591,8 @@ export const RageArena = ({
             .map(([id, p]) => ({ id, x: p.x, y: p.y })),
         ]
 
-        // Punching near a free chair grabs it. Bots never chase it (their AI
-        // targets fighters, not the chair) but can grab it opportunistically.
+        // Punching near a free chair grabs it (always — even solo). Bots never
+        // chase it (their AI targets fighters) but can grab it opportunistically.
         const ch = chair.current
         if (ch.heldBy === null) {
           for (const a of punchers) {
@@ -600,26 +607,29 @@ export const RageArena = ({
           }
         }
 
-        const victims = [
-          { v: m, meta: { id: myId, isMe: true, name: "You" } },
-          ...bots.current.map((b) => ({
-            v: b,
-            meta: { id: b.id, isMe: false, name: b.name },
-          })),
-        ]
-        for (const { v, meta } of victims) {
-          if (v.hp <= 0) continue
-          for (const a of punchers) {
-            if (a.id === meta.id) continue
-            if (Math.hypot(v.x - a.x, v.y - a.y) < HIT_RANGE)
-              hurt(
-                v,
-                meta,
-                a.x,
-                a.y,
-                a.id,
-                a.id === ch.heldBy ? CHAIR_DAMAGE : DAMAGE,
-              )
+        // The heavy victim×puncher damage loop only matters with opponents.
+        if (bots.current.length > 0 || ragePlayers.current.size > 0) {
+          const victims = [
+            { v: m, meta: { id: myId, isMe: true, name: "You" } },
+            ...bots.current.map((b) => ({
+              v: b,
+              meta: { id: b.id, isMe: false, name: b.name },
+            })),
+          ]
+          for (const { v, meta } of victims) {
+            if (v.hp <= 0) continue
+            for (const a of punchers) {
+              if (a.id === meta.id) continue
+              if (Math.hypot(v.x - a.x, v.y - a.y) < HIT_RANGE)
+                hurt(
+                  v,
+                  meta,
+                  a.x,
+                  a.y,
+                  a.id,
+                  a.id === ch.heldBy ? CHAIR_DAMAGE : DAMAGE,
+                )
+            }
           }
         }
       }
@@ -655,8 +665,8 @@ export const RageArena = ({
         }
       }
 
-      // --- last fighter standing wins ---
-      if (!intro) {
+      // --- last fighter standing wins (only relevant with bots in play) ---
+      if (!intro && bots.current.length > 0) {
         const fighters = [
           { id: myId, name: "You", hp: m.hp },
           ...bots.current.map((b) => ({ id: b.id, name: b.name, hp: b.hp })),
@@ -693,21 +703,25 @@ export const RageArena = ({
           let pos: { x: number; y: number }
           let hp: number
           let isPunching: boolean
+          let fistSide: "left" | "right" = "left"
           if (id === myId) {
             pos = m
             hp = m.hp
             isPunching = mePunching
+            fistSide = meFistSide.current
           } else {
             const bot = botById.get(id)
             if (bot) {
               pos = bot
               hp = bot.hp
               isPunching = bot.hp > 0 && now < bot.punchUntil
+              fistSide = bot.fistSide
             } else {
               const net = ragePlayers.current.get(id)
               pos = net ?? { x: 0.5, y: 0.5 }
               hp = net?.hp ?? 100
               isPunching = net?.punching ?? false
+              fistSide = Math.floor((net?.at ?? 0) / 150) % 2 ? "left" : "right"
             }
           }
           const isDead = hp <= 0
@@ -725,9 +739,10 @@ export const RageArena = ({
             const holdsChair = chair.current.heldBy === id
             fist.style.opacity =
               isPunching && !isDead && !holdsChair ? "1" : "0"
-            fist.style.transform = isPunching
-              ? "translateX(-10px)"
-              : "translateX(0)"
+            fist.style.left = fistSide === "left" ? "-12px" : "auto"
+            fist.style.right = fistSide === "right" ? "-12px" : "auto"
+            const jut = isPunching ? (fistSide === "left" ? -10 : 10) : 0
+            fist.style.transform = `translateY(-50%) translateX(${jut}px)`
           }
         }
 
@@ -827,7 +842,7 @@ export const RageArena = ({
             if (el) fistRefs.current.set(id, el)
             else fistRefs.current.delete(id)
           }}
-          className="pointer-events-none absolute -left-3 top-1/2 -translate-y-1/2 text-lg opacity-0 transition-[opacity,transform] duration-75"
+          className="pointer-events-none absolute top-1/2 text-lg opacity-0 transition-[opacity,transform] duration-75"
         >
           👊
         </span>
@@ -1119,6 +1134,7 @@ export const RageArena = ({
         <button
           onPointerDown={() => {
             if (Date.now() > punchUntil.current) playPunch()
+            meFistSide.current = Math.random() < 0.5 ? "left" : "right"
             punchUntil.current = Date.now() + PUNCH_MS
           }}
           className="rounded-full border border-red-400/50 bg-red-500/20 px-5 py-2 text-sm font-bold text-red-100 active:scale-95"
