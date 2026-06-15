@@ -272,53 +272,48 @@ export const playRageStart = () => {
   )
 }
 
-// Crowd cheer — a sustained roar (not a single swoosh): bandpassed noise held
-// for a few seconds with a ragged amplitude flutter so it reads as many voices.
+// Crowd cheer — a low roar floor with many random clap transients baked into
+// the buffer (Poisson-ish), so it reads as applause/voices, not a noise wave.
 export const playCheer = (volume = 0.05) => {
   const audio = audioContext()
   if (!audio || isMuted()) return
   const start = audio.currentTime
-  const duration = 3.2
+  const duration = 3.0
   const length = Math.ceil(audio.sampleRate * duration)
   const buffer = audio.createBuffer(1, length, audio.sampleRate)
   const data = buffer.getChannelData(0)
-  let smoothed = 0
+  let roar = 0
+  let clap = 0
   for (let i = 0; i < length; i++) {
     const white = Math.random() * 2 - 1
-    smoothed = 0.55 * smoothed + 0.45 * white
-    data[i] = smoothed
+    roar = 0.6 * roar + 0.4 * white // smoothed low roar floor
+    if (Math.random() < 0.0014) clap = 1 // ~60 claps/sec trigger
+    clap *= 0.9988 // ~40ms decay per clap
+    data[i] = roar * 0.28 + white * clap * 0.85
   }
   const source = audio.createBufferSource()
   source.buffer = buffer
 
+  // Voice/applause band.
   const bandpass = audio.createBiquadFilter()
   bandpass.type = "bandpass"
-  bandpass.frequency.value = 1500
-  bandpass.Q.value = 0.4
+  bandpass.frequency.value = 1800
+  bandpass.Q.value = 0.35
+  // A little air on top for the clap "sizzle".
+  const highshelf = audio.createBiquadFilter()
+  highshelf.type = "highshelf"
+  highshelf.frequency.value = 3500
+  highshelf.gain.value = 4
 
   const gain = audio.createGain()
-  // Quick rise, long sustained roar, gentle fade — not a single wave.
   gain.gain.setValueAtTime(0.0001, start)
-  gain.gain.linearRampToValueAtTime(volume, start + 0.25)
-  gain.gain.linearRampToValueAtTime(volume * 0.92, start + 2.2)
-  gain.gain.linearRampToValueAtTime(volume * 0.78, start + 2.7)
+  gain.gain.linearRampToValueAtTime(volume, start + 0.22)
+  gain.gain.linearRampToValueAtTime(volume * 0.9, start + 2.1)
   gain.gain.exponentialRampToValueAtTime(0.0001, start + duration)
 
-  // Flutter LFO → the "rrra-rrra" texture of a crowd rather than smooth noise.
-  const flutter = audio.createOscillator()
-  flutter.type = "triangle"
-  const flutterDepth = audio.createGain()
-  flutterDepth.gain.value = volume * 0.35
-  for (let jt = 0; jt < duration; jt += 0.15 + Math.random() * 0.15) {
-    flutter.frequency.setValueAtTime(7 + Math.random() * 6, start + jt)
-  }
-  flutter.connect(flutterDepth)
-  flutterDepth.connect(gain.gain)
-
   source.connect(bandpass)
-  bandpass.connect(gain)
+  bandpass.connect(highshelf)
+  highshelf.connect(gain)
   gain.connect(audio.destination)
   source.start(start)
-  flutter.start(start)
-  flutter.stop(start + duration)
 }
