@@ -124,91 +124,90 @@ export const playNewRound = () => {
   })
 }
 
+// A cat purrs at a ~25 Hz fundamental (real measurements: egressive ~21–27 Hz,
+// ingressive ~23–26 Hz — the inhale runs ~2.4 Hz higher). The 25 Hz itself is
+// near-inaudible on laptop speakers, so we use a 25 Hz sawtooth whose harmonics
+// (50/75/100 Hz…) carry the audible "rrrr", lowpassed warm and gated by a slow
+// inhale/exhale breathing envelope.
 export const playPurr = () => {
   const audio = audioContext()
   if (!audio || isMuted()) return
   const start = audio.currentTime
-  const duration = 2.9
 
-  // Pink-ish noise — warmer than white, without brown noise's seismic rumble.
-  const length = Math.ceil(audio.sampleRate * duration)
-  const buffer = audio.createBuffer(1, length, audio.sampleRate)
-  const data = buffer.getChannelData(0)
-  let smoothed = 0
-  for (let i = 0; i < length; i++) {
-    const white = Math.random() * 2 - 1
-    smoothed = 0.85 * smoothed + 0.15 * white
-    data[i] = smoothed * 0.8 + white * 0.1
-  }
-  const source = audio.createBufferSource()
-  source.buffer = buffer
+  const PHASES = [
+    { freq: 25, peak: 1, len: 0.95 }, // exhale: lower, longer, fuller
+    { freq: 27.4, peak: 0.62, len: 0.6 }, // inhale: higher, shorter, softer
+    { freq: 25, peak: 1, len: 0.95 },
+    { freq: 27.4, peak: 0.62, len: 0.6 },
+  ]
+  const dur = PHASES.reduce((a, p) => a + p.len, 0) + 0.3
 
-  // Cut the sub-bass that reads as a "godzilla" rumble rather than a purr.
-  const highpass = audio.createBiquadFilter()
-  highpass.type = "highpass"
-  highpass.frequency.value = 110
-  highpass.Q.value = 0.6
+  const out = audio.createGain()
+  out.gain.value = 0.22
+  out.connect(audio.destination)
+
+  // Breathing envelope shared by every layer.
+  const breath = audio.createGain()
+  breath.gain.setValueAtTime(0.0001, start)
+  breath.connect(out)
 
   const lowpass = audio.createBiquadFilter()
   lowpass.type = "lowpass"
-  lowpass.frequency.value = 240
-  lowpass.Q.value = 0.4
+  lowpass.frequency.value = 430
+  lowpass.Q.value = 0.5
+  lowpass.connect(breath)
 
-  const throat = audio.createBiquadFilter()
-  throat.type = "peaking"
-  throat.frequency.value = 130
-  throat.Q.value = 0.8
-  throat.gain.value = 2.5
+  // Core buzz — 25 Hz sawtooth → harmonics are the audible purr texture.
+  const buzz = audio.createOscillator()
+  buzz.type = "sawtooth"
+  const buzzGain = audio.createGain()
+  buzzGain.gain.value = 0.5
+  buzz.connect(buzzGain)
+  buzzGain.connect(lowpass)
 
-  const pulse = audio.createGain()
-  pulse.gain.value = 0.5
-  const lfo = audio.createOscillator()
-  const lfoDepth = audio.createGain()
-  lfoDepth.gain.value = 0.14
-  lfo.connect(lfoDepth)
-  lfoDepth.connect(pulse.gain)
+  // Sub fundamental — felt more than heard.
+  const sub = audio.createOscillator()
+  sub.type = "sine"
+  const subGain = audio.createGain()
+  subGain.gain.value = 0.3
+  sub.connect(subGain)
+  subGain.connect(breath)
 
-  // Organic throb: a regular rate sounds like an engine, so the flutter
-  // rate wanders randomly every fraction of a second.
-  for (let jt = 0; jt < duration; jt += 0.3 + Math.random() * 0.2) {
-    lfo.frequency.setValueAtTime(22 + Math.random() * 6, start + jt)
-  }
+  // Faint breath noise for airy texture.
+  const length = Math.ceil(audio.sampleRate * dur)
+  const buffer = audio.createBuffer(1, length, audio.sampleRate)
+  const data = buffer.getChannelData(0)
+  for (let i = 0; i < length; i++) data[i] = Math.random() * 2 - 1
+  const noise = audio.createBufferSource()
+  noise.buffer = buffer
+  const noiseBp = audio.createBiquadFilter()
+  noiseBp.type = "bandpass"
+  noiseBp.frequency.value = 550
+  noiseBp.Q.value = 0.4
+  const noiseGain = audio.createGain()
+  noiseGain.gain.value = 0.05
+  noise.connect(noiseBp)
+  noiseBp.connect(noiseGain)
+  noiseGain.connect(breath)
 
-  const body = audio.createOscillator()
-  const bodyGain = audio.createGain()
-  body.type = "sine"
-  body.frequency.value = 120
-  bodyGain.gain.value = 0.07
-  body.connect(bodyGain)
-  bodyGain.connect(pulse)
-
-  // Asymmetric breathing: a quicker, brighter inhale swell, then a longer,
-  // darker exhale fade — two cycles, à la Purrli.
-  const envelope = audio.createGain()
-  envelope.gain.setValueAtTime(0.02, start)
-  const INHALE = 0.5
-  const EXHALE = 0.8
+  // Drive breathing + per-phase pitch, with a touch of organic jitter.
   let t = start
-  for (let i = 0; i < 2; i++) {
-    envelope.gain.linearRampToValueAtTime(0.32, t + INHALE)
-    envelope.gain.linearRampToValueAtTime(0.06, t + INHALE + EXHALE)
-    lowpass.frequency.setValueAtTime(280, t)
-    lowpass.frequency.linearRampToValueAtTime(180, t + INHALE + EXHALE)
-    t += INHALE + EXHALE + 0.05
+  for (const ph of PHASES) {
+    const f = ph.freq + (Math.random() - 0.5) * 1.5
+    buzz.frequency.setValueAtTime(f, t)
+    sub.frequency.setValueAtTime(f, t)
+    breath.gain.linearRampToValueAtTime(ph.peak, t + ph.len * 0.4)
+    breath.gain.linearRampToValueAtTime(ph.peak * 0.5, t + ph.len)
+    t += ph.len
   }
-  envelope.gain.linearRampToValueAtTime(0.0001, t + 0.15)
+  breath.gain.linearRampToValueAtTime(0.0001, t + 0.25)
 
-  source.connect(highpass)
-  highpass.connect(lowpass)
-  lowpass.connect(throat)
-  throat.connect(pulse)
-  pulse.connect(envelope)
-  envelope.connect(audio.destination)
-  source.start(start)
-  lfo.start(start)
-  lfo.stop(start + duration)
-  body.start(start)
-  body.stop(start + duration)
+  const stop = t + 0.3
+  buzz.start(start)
+  buzz.stop(stop)
+  sub.start(start)
+  sub.stop(stop)
+  noise.start(start)
 }
 
 export const playClink = () => {

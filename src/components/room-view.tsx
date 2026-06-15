@@ -706,7 +706,11 @@ export const RoomView = ({
                 variant="ghost"
                 size="sm"
                 onClick={() => onSetApproval(!state.requireApproval)}
-                title="When on, you approve each person before they can join"
+                title={
+                  state.requireApproval
+                    ? "You approve each person before they can join. Click to let anyone with the link in directly."
+                    : "Anyone with the link joins instantly. Click to approve each joiner first."
+                }
                 className={cn(
                   "border text-xs",
                   state.requireApproval
@@ -714,7 +718,9 @@ export const RoomView = ({
                     : s.themeBtn,
                 )}
               >
-                {state.requireApproval ? "🔒 Approval on" : "🔓 Approval off"}
+                {state.requireApproval
+                  ? "🔒 Approving joiners"
+                  : "🔓 Anyone can join"}
               </Button>
             )}
             {isHost && onSetRage && (
