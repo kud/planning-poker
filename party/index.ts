@@ -354,6 +354,13 @@ export default class PokerRoom implements Party.Server {
         this.state = { ...this.state, rageEnabled: !!msg.enabled }
         break
       }
+      case "rage-restart": {
+        if (!isHost || !this.state.rageEnabled) return
+        this.room.broadcast(
+          JSON.stringify({ type: "rage-restarted" } satisfies Message),
+        )
+        return
+      }
       case "rage-invite": {
         if (!this.state.rageEnabled) return
         const name =

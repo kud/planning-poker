@@ -7,14 +7,18 @@ import type { RagePlayer } from "@/hooks/use-party-room"
 import { avatarUrl } from "@/lib/avatar"
 import { cn } from "@/lib/utils"
 import { DealerSprite } from "@/components/pixel-dealer"
+import { RotateCcw } from "lucide-react"
 import { playPunch, playHit, playBell, playCheer } from "@/lib/sounds"
 
 type Props = {
   myId: string
+  isHost: boolean
   participants: Record<string, Participant>
   ragePlayers: MutableRefObject<Map<string, RagePlayer>>
   onMove: (x: number, y: number, punching: boolean, hp: number) => void
   onExit: () => void
+  restartSignal: number
+  onRequestRestart?: () => void
 }
 
 const STALE_MS = 3000
@@ -25,7 +29,6 @@ const KNOCKBACK = 0.05
 const PUNCH_MS = 280
 const DAMAGE = 14
 const HIT_COOLDOWN = 550
-const RESPAWN_MS = 4000
 const INTRO_MS = 2200
 
 const FIGHT_QUIPS = [
@@ -46,12 +49,35 @@ const hpColor = (hp: number) =>
 
 type Blood = { id: number; x: number; y: number; angle: number; dist: number }
 
+type Bot = {
+  id: string
+  name: string
+  seed: string
+  x: number
+  y: number
+  vx: number
+  vy: number
+  hp: number
+  punchUntil: number
+  deadUntil: number
+  nextDecision: number
+  tx: number
+  ty: number
+}
+
+// A static set of fake spectators to fill the tribunes (independent of who's
+// actually in the session).
+const FAKE_CROWD = Array.from({ length: 30 }, (_, i) => `rage-crowd-${i}`)
+
 export const RageArena = ({
   myId,
+  isHost,
   participants,
   ragePlayers,
   onMove,
   onExit,
+  restartSignal,
+  onRequestRestart,
 }: Props) => {
   const containerRef = useRef<HTMLDivElement>(null)
   const nodeRefs = useRef<Map<string, HTMLDivElement>>(new Map())
@@ -71,17 +97,68 @@ export const RageArena = ({
   const lastHitFrom = useRef<Map<string, number>>(new Map())
   const bloodId = useRef(0)
 
+  const bots = useRef<Bot[]>([])
+  const botSeq = useRef(0)
+
   const [intro, setIntro] = useState(true)
   const [brawlers, setBrawlers] = useState<string[]>([myId])
+  const [botList, setBotList] = useState<
+    { id: string; name: string; seed: string }[]
+  >([])
   const [bloods, setBloods] = useState<Blood[]>([])
+  const [pools, setPools] = useState<{ id: number; x: number; y: number }[]>([])
   const [quip, setQuip] = useState<string | null>(null)
   const [flash, setFlash] = useState<string | null>(null)
+
+  const restart = () => {
+    const m = me.current
+    m.hp = 100
+    m.deadUntil = 0
+    bots.current.forEach((b, i) => {
+      b.hp = 100
+      b.deadUntil = 0
+      b.x = 0.3 + ((i * 13) % 40) / 100
+      b.y = 0.3 + ((i * 23) % 40) / 100
+    })
+    lastHitFrom.current.clear()
+    setPools([])
+    setBloods([])
+    setFlash(null)
+  }
+
+  const addBot = () => {
+    const n = ++botSeq.current
+    bots.current.push({
+      id: `bot-${n}`,
+      name: `Bot ${n}`,
+      seed: `rage-bot-${n}`,
+      x: 0.3 + ((n * 13) % 40) / 100,
+      y: 0.3 + ((n * 23) % 40) / 100,
+      vx: 0,
+      vy: 0,
+      hp: 100,
+      punchUntil: 0,
+      deadUntil: 0,
+      nextDecision: 0,
+      tx: 0.5,
+      ty: 0.5,
+    })
+    setBotList(
+      bots.current.map((b) => ({ id: b.id, name: b.name, seed: b.seed })),
+    )
+  }
 
   useEffect(() => {
     playBell()
     const t = setTimeout(() => setIntro(false), INTRO_MS)
     return () => clearTimeout(t)
   }, [])
+
+  // Host-triggered restart arrives as a signal — revive everyone locally.
+  useEffect(() => {
+    if (restartSignal > 0) restart()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [restartSignal])
 
   // Refresh roster + ringside crowd occasionally (positions update via refs).
   useEffect(() => {
@@ -135,20 +212,68 @@ export const RageArena = ({
 
   useEffect(() => {
     let raf = 0
+    const clamp = (n: number) => Math.max(0, Math.min(1, n))
     const loop = () => {
       const m = me.current
       const now = Date.now()
-      const dead = m.hp <= 0
 
-      if (dead && now > m.deadUntil) {
-        m.hp = 100
-        m.x = seedX(myId + now)
-        m.y = seedY(myId + now)
-        m.vx = 0
-        m.vy = 0
+      const spawnBlood = (x: number, y: number, amount = 12) =>
+        setBloods((prev) =>
+          [
+            ...prev,
+            ...Array.from({ length: amount }, () => ({
+              id: ++bloodId.current,
+              x,
+              y,
+              angle: Math.random() * Math.PI * 2,
+              dist: 22 + Math.random() * 48,
+            })),
+          ].slice(-90),
+        )
+
+      const hurt = (
+        v: {
+          x: number
+          y: number
+          vx: number
+          vy: number
+          hp: number
+          deadUntil: number
+        },
+        meta: { id: string; isMe: boolean; name: string },
+        ax: number,
+        ay: number,
+        attackerId: string,
+      ) => {
+        const key = `${attackerId}>${meta.id}`
+        if (now - (lastHitFrom.current.get(key) ?? 0) < HIT_COOLDOWN) return
+        lastHitFrom.current.set(key, now)
+        const dx = v.x - ax
+        const dy = v.y - ay
+        const dist = Math.hypot(dx, dy) || 1
+        v.vx += (dx / dist) * KNOCKBACK
+        v.vy += (dy / dist) * KNOCKBACK
+        v.hp = Math.max(0, v.hp - DAMAGE)
+        spawnBlood(v.x, v.y)
+        if (meta.isMe) playHit()
+        // Death is permanent — bodies stay down until the arena restarts.
+        if (v.hp <= 0 && v.deadUntil === 0) {
+          v.deadUntil = now
+          spawnBlood(v.x, v.y, 24)
+          const px = v.x
+          const py = v.y
+          setPools((prev) =>
+            [...prev, { id: ++bloodId.current, x: px, y: py }].slice(-30),
+          )
+          setFlash(`${meta.name} — K.O.! 💀`)
+          playBell()
+          playCheer(0.06)
+          setTimeout(() => setFlash(null), 1800)
+        }
       }
 
-      if (!intro && !dead) {
+      // --- update me ---
+      if (!intro && m.hp > 0) {
         const k = keys.current
         const left = k.has("arrowleft") || k.has("a")
         const right = k.has("arrowright") || k.has("d")
@@ -161,70 +286,112 @@ export const RageArena = ({
           m.vx += (target.current.x - m.x) * 0.012
           m.vy += (target.current.y - m.y) * 0.012
         }
+      }
+      m.vx *= FRICTION
+      m.vy *= FRICTION
+      m.x = clamp(m.x + m.vx)
+      m.y = clamp(m.y + m.vy)
+      if (m.x === 0 || m.x === 1) m.vx *= -0.4
+      if (m.y === 0 || m.y === 1) m.vy *= -0.4
+      const mePunching = m.hp > 0 && now < punchUntil.current
 
-        for (const [id, p] of ragePlayers.current) {
-          if (id === myId || !p.punching || now - p.at > 400) continue
-          const dx = m.x - p.x
-          const dy = m.y - p.y
-          const dist = Math.hypot(dx, dy)
-          if (dist >= HIT_RANGE) continue
-          if (now - (lastHitFrom.current.get(id) ?? 0) < HIT_COOLDOWN) continue
-          lastHitFrom.current.set(id, now)
-          const nx = dist === 0 ? 1 : dx / dist
-          const ny = dist === 0 ? 0 : dy / dist
-          m.vx += nx * KNOCKBACK
-          m.vy += ny * KNOCKBACK
-          m.hp = Math.max(0, m.hp - DAMAGE)
-          playHit()
-          const bx = m.x
-          const by = m.y
-          setBloods((prev) =>
-            [
-              ...prev,
-              ...Array.from({ length: 5 }, () => ({
-                id: ++bloodId.current,
-                x: bx,
-                y: by,
-                angle: Math.random() * Math.PI * 2,
-                dist: 18 + Math.random() * 34,
-              })),
-            ].slice(-40),
-          )
-          if (m.hp <= 0) {
-            m.deadUntil = now + RESPAWN_MS
-            setFlash("K.O.! 💀")
-            playBell()
-            playCheer(0.06)
-            setTimeout(() => setFlash(null), 1600)
+      // --- update bots (simple chase-and-punch AI) ---
+      for (const bot of bots.current) {
+        if (bot.hp <= 0) {
+          // dead — body stays put
+        } else if (!intro) {
+          if (now > bot.nextDecision) {
+            bot.nextDecision = now + 500 + Math.random() * 900
+            const targets = [
+              { x: m.x, y: m.y, alive: m.hp > 0 },
+              ...bots.current
+                .filter((o) => o !== bot && o.hp > 0)
+                .map((o) => ({ x: o.x, y: o.y, alive: true })),
+            ].filter((t) => t.alive)
+            if (targets.length) {
+              const t = targets.reduce((a, b) =>
+                Math.hypot(b.x - bot.x, b.y - bot.y) <
+                Math.hypot(a.x - bot.x, a.y - bot.y)
+                  ? b
+                  : a,
+              )
+              bot.tx = t.x
+              bot.ty = t.y
+            }
+            if (Math.random() < 0.6) bot.punchUntil = now + PUNCH_MS
+          }
+          bot.vx += (bot.tx - bot.x) * 0.011 + (Math.random() - 0.5) * 0.001
+          bot.vy += (bot.ty - bot.y) * 0.011 + (Math.random() - 0.5) * 0.001
+        }
+        bot.vx *= FRICTION
+        bot.vy *= FRICTION
+        bot.x = clamp(bot.x + bot.vx)
+        bot.y = clamp(bot.y + bot.vy)
+      }
+
+      // --- unified combat: punchers hit nearby victims ---
+      if (!intro) {
+        const punchers = [
+          ...(mePunching ? [{ id: myId, x: m.x, y: m.y }] : []),
+          ...bots.current
+            .filter((b) => b.hp > 0 && now < b.punchUntil)
+            .map((b) => ({ id: b.id, x: b.x, y: b.y })),
+          ...[...ragePlayers.current.entries()]
+            .filter(([, p]) => p.punching && now - p.at < 400)
+            .map(([id, p]) => ({ id, x: p.x, y: p.y })),
+        ]
+        const victims = [
+          { v: m, meta: { id: myId, isMe: true, name: "You" } },
+          ...bots.current.map((b) => ({
+            v: b,
+            meta: { id: b.id, isMe: false, name: b.name },
+          })),
+        ]
+        for (const { v, meta } of victims) {
+          if (v.hp <= 0) continue
+          for (const a of punchers) {
+            if (a.id === meta.id) continue
+            if (Math.hypot(v.x - a.x, v.y - a.y) < HIT_RANGE)
+              hurt(v, meta, a.x, a.y, a.id)
           }
         }
       }
 
-      m.vx *= FRICTION
-      m.vy *= FRICTION
-      m.x = Math.max(0, Math.min(1, m.x + m.vx))
-      m.y = Math.max(0, Math.min(1, m.y + m.vy))
-      if (m.x === 0 || m.x === 1) m.vx *= -0.4
-      if (m.y === 0 || m.y === 1) m.vy *= -0.4
-
-      const punching = !dead && now < punchUntil.current
       if (now - lastSent.current > 50) {
         lastSent.current = now
-        onMove(m.x, m.y, punching, m.hp)
+        onMove(m.x, m.y, mePunching, m.hp)
       }
 
+      // --- render transforms ---
       const rect = containerRef.current?.getBoundingClientRect()
       if (rect) {
         for (const id of nodeRefs.current.keys()) {
           const node = nodeRefs.current.get(id)
           if (!node) continue
-          const other = ragePlayers.current.get(id)
-          const pos = id === myId ? m : (other ?? { x: 0.5, y: 0.5 })
-          const hp = id === myId ? m.hp : (other?.hp ?? 100)
+          let pos: { x: number; y: number }
+          let hp: number
+          let isPunching: boolean
+          if (id === myId) {
+            pos = m
+            hp = m.hp
+            isPunching = mePunching
+          } else {
+            const bot = bots.current.find((b) => b.id === id)
+            if (bot) {
+              pos = bot
+              hp = bot.hp
+              isPunching = bot.hp > 0 && now < bot.punchUntil
+            } else {
+              const net = ragePlayers.current.get(id)
+              pos = net ?? { x: 0.5, y: 0.5 }
+              hp = net?.hp ?? 100
+              isPunching = net?.punching ?? false
+            }
+          }
           const isDead = hp <= 0
-          const isPunching = id === myId ? punching : (other?.punching ?? false)
-          node.style.transform = `translate(${pos.x * rect.width}px, ${pos.y * rect.height}px) translate(-50%, -50%) scale(${isPunching ? 1.25 : 1}) rotate(${isDead ? "82deg" : "0deg"})`
-          node.style.opacity = isDead ? "0.5" : "1"
+          node.style.transform = `translate(${pos.x * rect.width}px, ${pos.y * rect.height}px) translate(-50%, -50%) scale(${isPunching ? 1.25 : 1}) rotate(${isDead ? "90deg" : "0deg"})`
+          node.style.opacity = isDead ? "0.65" : "1"
+          node.style.filter = isDead ? "grayscale(1) brightness(0.6)" : "none"
           const fill = hpRefs.current.get(id)
           if (fill) {
             fill.style.width = `${Math.max(0, hp)}%`
@@ -251,6 +418,78 @@ export const RageArena = ({
   const spectators = Object.values(participants).filter(
     (p) => !brawlers.includes(p.id),
   )
+  const crowd = [
+    ...spectators.map((p) => ({ key: p.id, seed: p.avatar || p.name })),
+    ...FAKE_CROWD.map((seed) => ({ key: seed, seed })),
+  ]
+
+  const tribune = (side: "left" | "right") => (
+    <div
+      className={cn(
+        "pointer-events-none absolute top-0 z-0 flex h-full w-24 flex-col flex-wrap content-start justify-center gap-2 p-1.5 opacity-70 sm:w-36",
+        side === "left" ? "left-0" : "right-0",
+      )}
+    >
+      {crowd
+        .filter((_, i) => i % 2 === (side === "left" ? 0 : 1))
+        .map((c, i) => (
+          <motion.img
+            key={c.key}
+            src={avatarUrl(c.seed)}
+            alt=""
+            className="h-10 w-10 rounded-md sm:h-12 sm:w-12"
+            animate={{ y: [0, -4, 0] }}
+            transition={{
+              duration: 0.5 + (i % 5) * 0.1,
+              repeat: Infinity,
+              delay: (i % 7) * 0.12,
+            }}
+          />
+        ))}
+    </div>
+  )
+
+  const fighterNode = (
+    id: string,
+    label: string,
+    avatarSeed: string,
+    mine: boolean,
+  ) => (
+    <div
+      key={id}
+      ref={(el) => {
+        if (el) nodeRefs.current.set(id, el)
+        else nodeRefs.current.delete(id)
+      }}
+      className="absolute left-0 top-0 flex flex-col items-center will-change-transform"
+      style={{ transition: "transform 0.05s linear" }}
+    >
+      <div className="mb-1 h-1 w-12 overflow-hidden rounded-sm border border-white/20 bg-black/70">
+        <div
+          ref={(el) => {
+            if (el) hpRefs.current.set(id, el)
+            else hpRefs.current.delete(id)
+          }}
+          className="h-full"
+          style={{ width: "100%", background: "#34d399" }}
+        />
+      </div>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={avatarUrl(avatarSeed)}
+        alt={label}
+        draggable={false}
+        className={
+          mine
+            ? "h-12 w-12 rounded-xl ring-2 ring-red-400 shadow-[0_0_18px_rgba(248,113,113,0.7)]"
+            : "h-11 w-11 rounded-xl ring-1 ring-white/25"
+        }
+      />
+      <span className="mt-0.5 max-w-16 truncate text-[10px] text-white/80">
+        {label}
+      </span>
+    </div>
+  )
 
   return (
     <div className="fixed inset-0 z-[60] flex flex-col overflow-hidden bg-[radial-gradient(ellipse_at_50%_35%,#4a1420,#0a0610_72%)]">
@@ -258,6 +497,9 @@ export const RageArena = ({
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_30%_0%,rgba(255,220,150,0.14),transparent_40%),radial-gradient(circle_at_70%_0%,rgba(255,220,150,0.14),transparent_40%)]" />
       {/* Crowd silhouette band */}
       <div className="pointer-events-none absolute inset-x-0 top-0 h-16 bg-[repeating-linear-gradient(90deg,#000_0_8px,#15101a_8px_18px)] opacity-50 [mask-image:linear-gradient(to_bottom,black,transparent)]" />
+      {/* Fake spectators packing the side tribunes */}
+      {tribune("left")}
+      {tribune("right")}
 
       <div className="relative z-10 flex items-center justify-between px-4 py-3">
         <span className="text-lg font-black uppercase tracking-[0.2em] text-red-400 drop-shadow-[0_0_14px_rgba(248,113,113,0.7)]">
@@ -271,192 +513,153 @@ export const RageArena = ({
         </button>
       </div>
 
-      {/* Dealer commentator — top-left, OUTSIDE the ring */}
-      <div className="pointer-events-none absolute left-3 top-16 z-20 flex max-w-[40%] items-start gap-2">
-        <DealerSprite />
-        <AnimatePresence mode="wait">
-          {quip && !intro && (
-            <motion.span
-              key={quip}
-              initial={{ opacity: 0, y: 6, scale: 0.9 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0 }}
-              className="mt-2 rounded-xl border border-yellow-500/40 bg-[#10131f]/90 px-3 py-1.5 text-xs italic text-yellow-100"
-            >
-              {quip}
-            </motion.span>
-          )}
-        </AnimatePresence>
-      </div>
-
       {/* The ring — square, centred */}
       <div className="relative flex flex-1 items-center justify-center px-3 pb-2">
-        <div
-          ref={containerRef}
-          onPointerDown={onPointer}
-          onPointerMove={(e) => e.buttons === 1 && onPointer(e)}
-          className="relative aspect-square w-[min(92vw,68vh)] touch-none overflow-hidden rounded-2xl border-4 border-red-500/30 bg-[repeating-linear-gradient(45deg,rgba(255,255,255,0.02)_0_14px,transparent_14px_28px)] shadow-[inset_0_0_90px_rgba(0,0,0,0.7)]"
-        >
-          {/* Ropes */}
-          <div className="pointer-events-none absolute inset-3 rounded-xl border-2 border-white/15" />
-          <div className="pointer-events-none absolute inset-6 rounded-lg border border-white/10" />
+        <div className="relative aspect-square w-[min(92vw,68vh)]">
+          {/* Dealer commentator — anchored just outside the ring's top-left corner */}
+          <div className="pointer-events-none absolute bottom-full left-0 z-20 flex items-end gap-2 pb-1">
+            <DealerSprite />
+            <AnimatePresence mode="wait">
+              {quip && !intro && (
+                <motion.span
+                  key={quip}
+                  initial={{ opacity: 0, y: 6, scale: 0.9 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="mb-2 max-w-48 rounded-xl border border-yellow-500/40 bg-[#10131f]/90 px-3 py-1.5 text-xs italic text-yellow-100"
+                >
+                  {quip}
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </div>
 
-          {brawlers.map((id) => {
-            const p = participants[id]
-            if (!p) return null
-            return (
+          <div
+            ref={containerRef}
+            onPointerDown={onPointer}
+            onPointerMove={(e) => e.buttons === 1 && onPointer(e)}
+            className="relative h-full w-full touch-none overflow-hidden rounded-2xl border-4 border-red-500/30 bg-[repeating-linear-gradient(45deg,rgba(255,255,255,0.02)_0_14px,transparent_14px_28px)] shadow-[inset_0_0_90px_rgba(0,0,0,0.7)]"
+          >
+            {/* Ropes */}
+            <div className="pointer-events-none absolute inset-3 rounded-xl border-2 border-white/15" />
+            <div className="pointer-events-none absolute inset-6 rounded-lg border border-white/10" />
+
+            {/* Persistent blood pools — where a fighter fell, stays on the floor */}
+            {pools.map((pool) => (
               <div
-                key={id}
-                ref={(el) => {
-                  if (el) nodeRefs.current.set(id, el)
-                  else nodeRefs.current.delete(id)
-                }}
-                className="absolute left-0 top-0 flex flex-col items-center will-change-transform"
-                style={{ transition: "transform 0.05s linear" }}
+                key={pool.id}
+                className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2"
+                style={{ left: `${pool.x * 100}%`, top: `${pool.y * 100}%` }}
               >
-                <div className="mb-1 h-1 w-12 overflow-hidden rounded-sm border border-white/20 bg-black/70">
-                  <div
-                    ref={(el) => {
-                      if (el) hpRefs.current.set(id, el)
-                      else hpRefs.current.delete(id)
-                    }}
-                    className="h-full"
-                    style={{ width: "100%", background: "#34d399" }}
-                  />
-                </div>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={avatarUrl(p.avatar || p.name)}
-                  alt={p.name}
-                  draggable={false}
-                  className={
-                    id === myId
-                      ? "h-12 w-12 rounded-xl ring-2 ring-red-400 shadow-[0_0_18px_rgba(248,113,113,0.7)]"
-                      : "h-11 w-11 rounded-xl ring-1 ring-white/25"
+                {Array.from({ length: 6 }).map((_, i) => {
+                  const a = (((pool.id * 7 + i * 53) % 360) * Math.PI) / 180
+                  const r = 4 + ((pool.id + i * 13) % 14)
+                  const sz = 7 + ((pool.id * 3 + i * 7) % 12)
+                  return (
+                    <span
+                      key={i}
+                      className="absolute rounded-full bg-red-900/70 blur-[1px]"
+                      style={{
+                        width: sz,
+                        height: sz,
+                        left: Math.cos(a) * r,
+                        top: Math.sin(a) * r,
+                      }}
+                    />
+                  )
+                })}
+              </div>
+            ))}
+
+            {brawlers.map((id) => {
+              const p = participants[id]
+              if (!p) return null
+              return fighterNode(
+                id,
+                id === myId ? "You" : p.name,
+                p.avatar || p.name,
+                id === myId,
+              )
+            })}
+
+            {botList.map((b) => fighterNode(b.id, b.name, b.seed, false))}
+
+            {/* Blood splatter */}
+            <AnimatePresence>
+              {bloods.map((b) => (
+                <motion.span
+                  key={b.id}
+                  className="pointer-events-none absolute h-1.5 w-1.5 rounded-full bg-red-600"
+                  initial={{
+                    left: `${b.x * 100}%`,
+                    top: `${b.y * 100}%`,
+                    opacity: 0.9,
+                    scale: 1,
+                  }}
+                  animate={{
+                    x: Math.cos(b.angle) * b.dist,
+                    y: Math.sin(b.angle) * b.dist + 14,
+                    opacity: 0,
+                    scale: 0.4,
+                  }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.7, ease: "easeOut" }}
+                  onAnimationComplete={() =>
+                    setBloods((prev) => prev.filter((x) => x.id !== b.id))
                   }
                 />
-                <span className="mt-0.5 max-w-16 truncate text-[10px] text-white/80">
-                  {id === myId ? "You" : p.name}
-                </span>
-              </div>
-            )
-          })}
+              ))}
+            </AnimatePresence>
 
-          {/* Blood splatter */}
-          <AnimatePresence>
-            {bloods.map((b) => (
-              <motion.span
-                key={b.id}
-                className="pointer-events-none absolute h-1.5 w-1.5 rounded-full bg-red-600"
-                initial={{
-                  left: `${b.x * 100}%`,
-                  top: `${b.y * 100}%`,
-                  opacity: 0.9,
-                  scale: 1,
-                }}
-                animate={{
-                  x: Math.cos(b.angle) * b.dist,
-                  y: Math.sin(b.angle) * b.dist + 14,
-                  opacity: 0,
-                  scale: 0.4,
-                }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.7, ease: "easeOut" }}
-                onAnimationComplete={() =>
-                  setBloods((prev) => prev.filter((x) => x.id !== b.id))
-                }
-              />
-            ))}
-          </AnimatePresence>
-
-          {/* KO flash */}
-          <AnimatePresence>
-            {flash && (
-              <motion.div
-                initial={{ scale: 0.4, opacity: 0, rotate: -8 }}
-                animate={{ scale: 1, opacity: 1, rotate: 0 }}
-                exit={{ scale: 1.4, opacity: 0 }}
-                className="pointer-events-none absolute inset-0 flex items-center justify-center text-6xl font-black uppercase tracking-widest text-red-500 drop-shadow-[0_0_24px_rgba(239,68,68,0.8)]"
-              >
-                {flash}
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Intro: the felt table is hauled out of the ring, title slams in. */}
-          <AnimatePresence>
-            {intro && (
-              <motion.div
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.4 }}
-                className="absolute inset-0 flex items-center justify-center overflow-hidden bg-black/55"
-              >
+            {/* KO flash */}
+            <AnimatePresence>
+              {flash && (
                 <motion.div
-                  initial={{ x: "-100%" }}
-                  animate={{ x: "100%" }}
-                  transition={{ duration: 0.7, ease: "easeInOut" }}
-                  className="absolute inset-0 bg-gradient-to-r from-transparent via-red-600/40 to-transparent"
-                />
-                {/* The poker felt being dragged off the ring */}
-                <motion.div
-                  initial={{ x: "0%", rotate: 0, opacity: 1 }}
-                  animate={{ x: "150%", rotate: 12, opacity: 0.85 }}
-                  transition={{ duration: 1.4, delay: 0.35, ease: "easeIn" }}
-                  className="absolute h-28 w-44 rounded-[40%] border-4 border-amber-900/60 bg-[radial-gradient(ellipse_at_center,#1f7a4d,#0c4a2e)] shadow-2xl"
-                />
-                <motion.span
-                  initial={{ scale: 2.4, opacity: 0, rotate: -6 }}
-                  animate={{ scale: [2.4, 0.9, 1], opacity: [0, 1, 1] }}
-                  transition={{ duration: 0.6, delay: 0.9 }}
-                  className="absolute text-4xl font-black uppercase tracking-[0.2em] text-red-500 drop-shadow-[0_0_24px_rgba(239,68,68,0.8)] sm:text-6xl"
+                  initial={{ scale: 0.4, opacity: 0, rotate: -8 }}
+                  animate={{ scale: 1, opacity: 1, rotate: 0 }}
+                  exit={{ scale: 1.4, opacity: 0 }}
+                  className="pointer-events-none absolute inset-0 flex items-center justify-center text-6xl font-black uppercase tracking-widest text-red-500 drop-shadow-[0_0_24px_rgba(239,68,68,0.8)]"
                 >
-                  Rage Mode
-                </motion.span>
-              </motion.div>
-            )}
-          </AnimatePresence>
+                  {flash}
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Intro: the felt table is hauled out of the ring, title slams in. */}
+            <AnimatePresence>
+              {intro && (
+                <motion.div
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.4 }}
+                  className="absolute inset-0 flex items-center justify-center overflow-hidden bg-black/55"
+                >
+                  <motion.div
+                    initial={{ x: "-100%" }}
+                    animate={{ x: "100%" }}
+                    transition={{ duration: 0.7, ease: "easeInOut" }}
+                    className="absolute inset-0 bg-gradient-to-r from-transparent via-red-600/50 to-transparent"
+                  />
+                  <motion.div
+                    initial={{ scale: 2.6, opacity: 0, rotate: -6 }}
+                    animate={{ scale: [2.6, 0.92, 1], opacity: [0, 1, 1] }}
+                    transition={{ duration: 0.55, delay: 0.5 }}
+                    className="absolute flex flex-col items-center gap-1"
+                  >
+                    <span className="text-4xl font-black uppercase tracking-[0.2em] text-red-500 drop-shadow-[0_0_24px_rgba(239,68,68,0.85)] sm:text-6xl">
+                      Rage Mode
+                    </span>
+                    <span className="text-xs uppercase tracking-[0.3em] text-white/60">
+                      Fight!
+                    </span>
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
       </div>
 
-      {/* Ringside spectators — cheering crowd flanking the ring */}
-      {(["left", "right"] as const).map((side) => {
-        const crowd = spectators.filter(
-          (_, i) => i % 2 === (side === "left" ? 0 : 1),
-        )
-        if (crowd.length === 0) return null
-        return (
-          <div
-            key={side}
-            className={cn(
-              "pointer-events-none absolute top-1/2 z-10 flex -translate-y-1/2 flex-col items-center gap-3",
-              side === "left" ? "left-1.5" : "right-1.5",
-            )}
-          >
-            {crowd.slice(0, 6).map((p, i) => (
-              <motion.div
-                key={p.id}
-                className="flex flex-col items-center"
-                animate={{ y: [0, -5, 0] }}
-                transition={{
-                  duration: 0.55,
-                  repeat: Infinity,
-                  delay: (i % 4) * 0.13,
-                }}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={avatarUrl(p.avatar || p.name)}
-                  alt={p.name}
-                  className="h-7 w-7 rounded-md opacity-75"
-                />
-                <span className="text-[10px] leading-none">🙌</span>
-              </motion.div>
-            ))}
-          </div>
-        )
-      })}
-
-      <div className="relative z-10 flex items-center justify-center gap-4 px-4 py-3 text-center text-xs text-white/55">
+      <div className="relative z-10 flex flex-wrap items-center justify-center gap-3 px-4 py-3 text-center text-xs text-white/55">
         <span className="hidden sm:inline">
           WASD / arrows to move · Space to punch · drag on touch
         </span>
@@ -469,6 +672,21 @@ export const RageArena = ({
         >
           👊 Punch
         </button>
+        <button
+          onClick={addBot}
+          className="rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm text-white hover:bg-white/20"
+        >
+          🤖 Add bot
+        </button>
+        {isHost && (
+          <button
+            onClick={onRequestRestart}
+            className="flex items-center gap-1.5 rounded-full border border-emerald-400/40 bg-emerald-500/15 px-4 py-2 text-sm text-emerald-100 hover:bg-emerald-500/25"
+          >
+            <RotateCcw className="h-4 w-4" />
+            Restart arena
+          </button>
+        )}
       </div>
     </div>
   )

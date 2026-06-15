@@ -94,6 +94,8 @@ const GuestRoomConnected = ({
     ragePlayers,
     rageInvite,
     dismissRageInvite,
+    rageRestart,
+    requestRageRestart,
   } = usePartyRoom({
     roomId,
     name,
@@ -172,6 +174,8 @@ const GuestRoomConnected = ({
         ragePlayers={ragePlayers}
         rageInvite={rageInvite}
         onDismissRageInvite={dismissRageInvite}
+        rageRestart={rageRestart}
+        onRequestRageRestart={requestRageRestart}
         reactions={reactions}
         presenceEvents={presenceEvents}
         onCopyCode={copyCode}

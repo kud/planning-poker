@@ -67,6 +67,8 @@ export type Message =
   | { type: "set-rage"; enabled: boolean }
   | { type: "rage-invite" }
   | { type: "rage-invited"; from: string; name: string }
+  | { type: "rage-restart" }
+  | { type: "rage-restarted" }
   | { type: "rage-move"; x: number; y: number; punching: boolean; hp: number }
   | {
       type: "rage"

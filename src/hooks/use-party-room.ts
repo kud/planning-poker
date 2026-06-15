@@ -64,6 +64,7 @@ export const usePartyRoom = ({
   const presenceId = useRef(0)
   const ragePlayers = useRef<Map<string, RagePlayer>>(new Map())
   const [rageInvite, setRageInvite] = useState<RageInvite | null>(null)
+  const [rageRestart, setRageRestart] = useState(0)
 
   const socket = usePartySocket({
     host: PARTYKIT_HOST,
@@ -115,6 +116,10 @@ export const usePartyRoom = ({
           from: msg.from,
           name: msg.name,
         })
+      }
+      if (msg.type === "rage-restarted") {
+        ragePlayers.current.clear()
+        setRageRestart((n) => n + 1)
       }
       if (msg.type === "presence" && msg.clientId !== clientId) {
         const id = ++presenceId.current
@@ -172,5 +177,7 @@ export const usePartyRoom = ({
     ragePlayers,
     rageInvite,
     dismissRageInvite: () => setRageInvite(null),
+    rageRestart,
+    requestRageRestart: () => send({ type: "rage-restart" }),
   }
 }

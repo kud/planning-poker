@@ -49,6 +49,7 @@ import {
 import { saveSettings } from "@/lib/settings"
 
 type Theme = "dark" | "light"
+type ThemePref = "system" | "dark" | "light"
 
 type Props = {
   state: RoomState
@@ -81,6 +82,8 @@ type Props = {
   ragePlayers?: MutableRefObject<Map<string, RagePlayer>>
   rageInvite?: RageInvite | null
   onDismissRageInvite?: () => void
+  rageRestart?: number
+  onRequestRageRestart?: () => void
   reactions?: Reaction[]
   presenceEvents?: PresenceEvent[]
 }
@@ -372,10 +375,14 @@ export const RoomView = ({
   ragePlayers,
   rageInvite,
   onDismissRageInvite,
+  rageRestart,
+  onRequestRageRestart,
   reactions,
   presenceEvents,
 }: Props) => {
-  const [theme, setTheme] = useState<Theme>("dark")
+  const [themePref, setThemePref] = useState<ThemePref>("system")
+  const [systemTheme, setSystemTheme] = useState<Theme>("dark")
+  const theme: Theme = themePref === "system" ? systemTheme : themePref
   const [rageActive, setRageActive] = useState(false)
   const [flyingCard, setFlyingCard] = useState<{
     value: string
@@ -437,13 +444,20 @@ export const RoomView = ({
   }, [state.speaker])
 
   useEffect(() => {
-    const saved = localStorage.getItem("pp-theme") as Theme | null
-    if (saved === "dark" || saved === "light") setTheme(saved)
+    const saved = localStorage.getItem("pp-theme") as ThemePref | null
+    if (saved === "dark" || saved === "light" || saved === "system")
+      setThemePref(saved)
+    const mq = window.matchMedia("(prefers-color-scheme: dark)")
+    const apply = () => setSystemTheme(mq.matches ? "dark" : "light")
+    apply()
+    mq.addEventListener("change", apply)
+    return () => mq.removeEventListener("change", apply)
   }, [])
 
-  const toggleTheme = () => {
-    const next: Theme = theme === "dark" ? "light" : "dark"
-    setTheme(next)
+  const cycleTheme = () => {
+    const order: ThemePref[] = ["system", "light", "dark"]
+    const next = order[(order.indexOf(themePref) + 1) % order.length]
+    setThemePref(next)
     localStorage.setItem("pp-theme", next)
   }
 
@@ -618,10 +632,12 @@ export const RoomView = ({
             <Button
               variant="ghost"
               size="sm"
-              onClick={toggleTheme}
+              onClick={cycleTheme}
+              title={`Theme: ${themePref} (click to change)`}
+              aria-label={`Theme: ${themePref}`}
               className={`border text-sm ${s.themeBtn}`}
             >
-              {theme === "dark" ? "☀︎" : "☾"}
+              {themePref === "system" ? "🖥" : themePref === "dark" ? "☾" : "☀︎"}
             </Button>
             {onClearHistory && (
               <SessionHistory
@@ -988,10 +1004,13 @@ export const RoomView = ({
         {rageActive && state.rageEnabled && onRageMove && ragePlayers && (
           <RageArena
             myId={myId}
+            isHost={isHost}
             participants={state.participants}
             ragePlayers={ragePlayers}
             onMove={onRageMove}
             onExit={() => setRageActive(false)}
+            restartSignal={rageRestart ?? 0}
+            onRequestRestart={onRequestRageRestart}
           />
         )}
 
