@@ -286,34 +286,32 @@ export const playCheer = (volume = 0.05) => {
   let clap = 0
   for (let i = 0; i < length; i++) {
     const white = Math.random() * 2 - 1
-    roar = 0.6 * roar + 0.4 * white // smoothed low roar floor
-    if (Math.random() < 0.0014) clap = 1 // ~60 claps/sec trigger
-    clap *= 0.9988 // ~40ms decay per clap
-    data[i] = roar * 0.28 + white * clap * 0.85
+    roar = 0.72 * roar + 0.28 * white // warm, smoothed roar body
+    if (Math.random() < 0.0004) clap = 1 // ~18 soft claps/sec
+    clap *= 0.9994 // ~75ms decay — soft "pat", not a sharp tick
+    data[i] = roar * 0.5 + white * clap * 0.4
   }
   const source = audio.createBufferSource()
   source.buffer = buffer
 
-  // Voice/applause band.
+  // Warm voice band — no high sizzle (that read as a cricket/güiro).
   const bandpass = audio.createBiquadFilter()
   bandpass.type = "bandpass"
-  bandpass.frequency.value = 1800
-  bandpass.Q.value = 0.35
-  // A little air on top for the clap "sizzle".
-  const highshelf = audio.createBiquadFilter()
-  highshelf.type = "highshelf"
-  highshelf.frequency.value = 3500
-  highshelf.gain.value = 4
+  bandpass.frequency.value = 820
+  bandpass.Q.value = 0.6
+  const lowpass = audio.createBiquadFilter()
+  lowpass.type = "lowpass"
+  lowpass.frequency.value = 2200
 
   const gain = audio.createGain()
   gain.gain.setValueAtTime(0.0001, start)
-  gain.gain.linearRampToValueAtTime(volume, start + 0.22)
+  gain.gain.linearRampToValueAtTime(volume, start + 0.25)
   gain.gain.linearRampToValueAtTime(volume * 0.9, start + 2.1)
   gain.gain.exponentialRampToValueAtTime(0.0001, start + duration)
 
   source.connect(bandpass)
-  bandpass.connect(highshelf)
-  highshelf.connect(gain)
+  bandpass.connect(lowpass)
+  lowpass.connect(gain)
   gain.connect(audio.destination)
   source.start(start)
 }
