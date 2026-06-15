@@ -19,6 +19,8 @@ const normalizeState = (s: Partial<RoomState>): RoomState => ({
   autoReveal: s.autoReveal ?? false,
   rageEnabled: s.rageEnabled ?? false,
   timer: s.timer ?? null,
+  requireApproval: s.requireApproval ?? false,
+  pending: s.pending ?? {},
 })
 
 export type RagePlayer = {
@@ -215,6 +217,9 @@ export const usePartyRoom = ({
       setBreakRequest(null)
       setBreakResponses([])
     },
+    setApproval: (enabled: boolean) => send({ type: "set-approval", enabled }),
+    admit: (clientId: string) => send({ type: "admit", clientId }),
+    deny: (clientId: string) => send({ type: "deny", clientId }),
     setRage: (enabled: boolean) => send({ type: "set-rage", enabled }),
     inviteToRage: () => send({ type: "rage-invite" }),
     sendRageMove: (x: number, y: number, punching: boolean, hp: number) =>

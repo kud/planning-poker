@@ -44,6 +44,8 @@ export type RoomState = {
   autoReveal: boolean
   rageEnabled: boolean
   timer: { endsAt: number; duration: number } | null
+  requireApproval: boolean
+  pending: Record<string, { id: string; name: string; avatar: string }>
 }
 
 export type Message =
@@ -70,6 +72,9 @@ export type Message =
   | { type: "break-requested"; from: string; name: string }
   | { type: "break-response"; accept: boolean }
   | { type: "break-responded"; from: string; name: string; accept: boolean }
+  | { type: "set-approval"; enabled: boolean }
+  | { type: "admit"; clientId: string }
+  | { type: "deny"; clientId: string }
   | { type: "set-rage"; enabled: boolean }
   | { type: "rage-invite" }
   | { type: "rage-invited"; from: string; name: string }

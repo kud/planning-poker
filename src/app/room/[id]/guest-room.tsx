@@ -95,6 +95,9 @@ const GuestRoomConnected = ({
     breakRequest,
     breakResponses,
     dismissBreak,
+    setApproval,
+    admit,
+    deny,
     setRage,
     sendRageMove,
     inviteToRage,
@@ -149,6 +152,33 @@ const GuestRoomConnected = ({
     )
   }
 
+  const amParticipant = !!state.participants[clientId]
+  const amPending = !!state.pending[clientId]
+
+  if (!amParticipant && (amPending || state.requireApproval)) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 px-6 text-center">
+        <span className="text-4xl">{amPending ? "✋" : "🚫"}</span>
+        <p className="text-lg font-semibold">
+          {amPending
+            ? "Waiting for the host to let you in…"
+            : "The host didn't let you in"}
+        </p>
+        <p className="max-w-sm text-sm text-muted-foreground">
+          {amPending
+            ? "This room is set to approve new joiners. Hang tight."
+            : "Ask the host to re-open the room, or check the room code."}
+        </p>
+        <Link
+          href="/"
+          className="text-sm text-muted-foreground underline underline-offset-4"
+        >
+          Back to home
+        </Link>
+      </div>
+    )
+  }
+
   const isHost = state.participants[clientId]?.isHost ?? false
 
   return (
@@ -181,6 +211,9 @@ const GuestRoomConnected = ({
         breakRequest={breakRequest}
         breakResponses={breakResponses}
         onDismissBreak={dismissBreak}
+        onSetApproval={setApproval}
+        onAdmit={admit}
+        onDeny={deny}
         onSetRage={setRage}
         onRageMove={sendRageMove}
         onInviteRage={inviteToRage}

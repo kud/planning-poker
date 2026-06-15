@@ -93,6 +93,9 @@ type Props = {
   breakRequest?: { from: string; name: string } | null
   breakResponses?: { from: string; name: string; accept: boolean }[]
   onDismissBreak?: () => void
+  onSetApproval?: (enabled: boolean) => void
+  onAdmit?: (clientId: string) => void
+  onDeny?: (clientId: string) => void
   reactions?: Reaction[]
   presenceEvents?: PresenceEvent[]
 }
@@ -407,6 +410,9 @@ export const RoomView = ({
   breakRequest,
   breakResponses,
   onDismissBreak,
+  onSetApproval,
+  onAdmit,
+  onDeny,
   reactions,
   presenceEvents,
 }: Props) => {
@@ -694,6 +700,22 @@ export const RoomView = ({
                 className={`border text-xs ${s.themeBtn}`}
               >
                 ☕ Break
+              </Button>
+            )}
+            {isHost && onSetApproval && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onSetApproval(!state.requireApproval)}
+                title="When on, you approve each person before they can join"
+                className={cn(
+                  "border text-xs",
+                  state.requireApproval
+                    ? "border-emerald-400/50 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25 hover:text-emerald-200 dark:hover:bg-emerald-500/25"
+                    : s.themeBtn,
+                )}
+              >
+                {state.requireApproval ? "🔒 Approval on" : "🔓 Approval off"}
               </Button>
             )}
             {isHost && onSetRage && (
@@ -1051,6 +1073,40 @@ export const RoomView = ({
         </div>
 
         <OnboardingHints isHost={isHost} />
+
+        {/* Host: pending join requests (approval mode) */}
+        {isHost &&
+          onAdmit &&
+          onDeny &&
+          Object.keys(state.pending).length > 0 && (
+            <div className="fixed right-3 top-20 z-50 flex w-60 flex-col gap-2 rounded-xl border border-emerald-400/40 bg-[#0d1117]/95 p-3 shadow-[0_0_30px_rgba(16,185,129,0.25)] backdrop-blur-md">
+              <span className="text-xs font-bold uppercase tracking-widest text-emerald-300">
+                ✋ Waiting to join
+              </span>
+              {Object.values(state.pending).map((p) => (
+                <div key={p.id} className="flex items-center gap-2">
+                  <span className="min-w-0 flex-1 truncate text-sm text-white">
+                    {p.name}
+                  </span>
+                  <Button
+                    size="sm"
+                    className="h-7 border border-emerald-400/50 bg-emerald-600/80 px-2 text-xs text-white hover:bg-emerald-600"
+                    onClick={() => onAdmit(p.id)}
+                  >
+                    Admit
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 px-2 text-xs text-slate-400 hover:text-white"
+                    onClick={() => onDeny(p.id)}
+                  >
+                    Deny
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
 
         {reactions && <FloatingReactions reactions={reactions} />}
 

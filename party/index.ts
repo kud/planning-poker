@@ -46,6 +46,8 @@ const freshState = (): RoomState => ({
   autoReveal: false,
   rageEnabled: false,
   timer: null,
+  requireApproval: false,
+  pending: {},
 })
 
 const clampText = (value: unknown, max = MAX_TEXT_LEN) =>
@@ -119,6 +121,28 @@ export default class PokerRoom implements Party.Server {
 
     const isHost = !!secret && secret === this.hostSecret
     const existing = this.state.participants[clientId]
+
+    // Gate new, non-host joiners into a pending bucket when approval is on.
+    // Already-admitted participants (reconnects) are grandfathered through.
+    if (this.state.requireApproval && !isHost && !existing) {
+      this.state = {
+        ...this.state,
+        pending: {
+          ...this.state.pending,
+          [clientId]: {
+            id: clientId,
+            name: uniqueName(name, {
+              ...this.state.participants,
+              ...this.state.pending,
+            }),
+            avatar,
+          },
+        },
+      }
+      this.broadcastState()
+      return
+    }
+
     this.state = {
       ...this.state,
       participants: {
@@ -178,6 +202,14 @@ export default class PokerRoom implements Party.Server {
     const clientId = this.connToClientId.get(sender.id) ?? sender.id
     const senderSecret = this.connToSecret.get(sender.id) ?? ""
     const isHost = !!this.hostSecret && senderSecret === this.hostSecret
+
+    // A pending (un-admitted) client can't do anything until the host lets it in.
+    if (
+      this.state.requireApproval &&
+      !isHost &&
+      !this.state.participants[clientId]
+    )
+      return
 
     switch (msg.type) {
       case "vote": {
@@ -393,6 +425,77 @@ export default class PokerRoom implements Party.Server {
           } satisfies Message),
         )
         return
+      }
+      case "set-approval": {
+        if (!isHost) return
+        const enabled = !!msg.enabled
+        if (!enabled && Object.keys(this.state.pending).length > 0) {
+          // Disabling approval admits everyone currently waiting.
+          const admitted = Object.fromEntries(
+            Object.values(this.state.pending).map((p) => [
+              p.id,
+              {
+                id: p.id,
+                name: p.name,
+                avatar: p.avatar,
+                vote: null,
+                isHost: false,
+              },
+            ]),
+          )
+          this.state = {
+            ...this.state,
+            requireApproval: false,
+            participants: { ...this.state.participants, ...admitted },
+            pending: {},
+          }
+        } else {
+          this.state = { ...this.state, requireApproval: enabled }
+        }
+        break
+      }
+      case "admit": {
+        if (!isHost) return
+        const p = this.state.pending[msg.clientId]
+        if (!p) return
+        const pending = { ...this.state.pending }
+        delete pending[msg.clientId]
+        this.state = {
+          ...this.state,
+          pending,
+          participants: {
+            ...this.state.participants,
+            [p.id]: {
+              id: p.id,
+              name: p.name,
+              avatar: p.avatar,
+              vote: null,
+              isHost: false,
+            },
+          },
+        }
+        this.broadcastState()
+        this.room.broadcast(
+          JSON.stringify({
+            type: "presence",
+            event: "join",
+            clientId: p.id,
+            name: p.name,
+            avatar: p.avatar,
+          } satisfies Message),
+        )
+        return
+      }
+      case "deny": {
+        if (!isHost) return
+        if (!this.state.pending[msg.clientId]) return
+        const pending = { ...this.state.pending }
+        delete pending[msg.clientId]
+        // Leave the connection open — removing from `pending` (without admitting)
+        // is what the client reads as "denied". Closing would just reconnect
+        // and re-enter the pending queue.
+        this.state = { ...this.state, pending }
+        break
       }
       case "set-rage": {
         if (!isHost) return
