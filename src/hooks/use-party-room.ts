@@ -2,7 +2,9 @@
 
 import { useRef, useState } from "react"
 import usePartySocket from "partysocket/react"
-import { Deck, Message, RoomState } from "@/lib/types"
+import { CardValue, Deck, Message, RoomState } from "@/lib/types"
+
+export type ConnectionStatus = "connecting" | "connected" | "reconnecting"
 
 export type Reaction = {
   id: number
@@ -44,7 +46,8 @@ export const usePartyRoom = ({
   clientId,
 }: Options) => {
   const [state, setState] = useState<RoomState | null>(null)
-  const [connected, setConnected] = useState(false)
+  const [status, setStatus] = useState<ConnectionStatus>("connecting")
+  const hasConnected = useRef(false)
   const [reactions, setReactions] = useState<Reaction[]>([])
   const reactionId = useRef(0)
   const [presenceEvents, setPresenceEvents] = useState<PresenceEvent[]>([])
@@ -60,13 +63,19 @@ export const usePartyRoom = ({
       ...(hostSecret ? { hostSecret } : {}),
     },
     onOpen() {
-      setConnected(true)
+      hasConnected.current = true
+      setStatus("connected")
     },
     onClose() {
-      setConnected(false)
+      setStatus(hasConnected.current ? "reconnecting" : "connecting")
     },
     onMessage(e: MessageEvent) {
-      const msg = JSON.parse(e.data) as Message
+      let msg: Message
+      try {
+        msg = JSON.parse(e.data) as Message
+      } catch {
+        return
+      }
       if (msg.type === "state") setState(msg.state)
       if (msg.type === "reaction") {
         const id = ++reactionId.current
@@ -104,7 +113,8 @@ export const usePartyRoom = ({
 
   return {
     state,
-    connected,
+    status,
+    connected: status === "connected",
     reactions,
     presenceEvents,
     react: (emoji: string) => send({ type: "react", emoji }),
@@ -115,5 +125,11 @@ export const usePartyRoom = ({
     rollSpeaker: () => send({ type: "roll-speaker" }),
     updateProfile: (name: string, avatar: string) =>
       send({ type: "update-profile", name, avatar }),
+    setTopic: (title: string, url: string | null) =>
+      send({ type: "set-topic", title, url }),
+    saveRound: (estimate: CardValue) => send({ type: "save-round", estimate }),
+    clearHistory: () => send({ type: "clear-history" }),
+    setAutoReveal: (enabled: boolean) =>
+      send({ type: "set-auto-reveal", enabled }),
   }
 }

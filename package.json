@@ -11,7 +11,8 @@
     "lint": "eslint",
     "party:dev": "partykit dev",
     "party:deploy": "partykit deploy",
-    "crew": "node scripts/crew.js"
+    "crew": "node scripts/crew.js",
+    "test": "vitest run"
   },
   "dependencies": {
     "@base-ui/react": "1.4.1",
@@ -38,6 +39,7 @@
     "eslint-config-next": "16.2.4",
     "partykit": "0.0.115",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "4.1.9"
   }
 }

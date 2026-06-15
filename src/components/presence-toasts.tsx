@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect } from "react"
-import { motion, AnimatePresence } from "framer-motion"
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion"
 import type { PresenceEvent } from "@/hooks/use-party-room"
 import { avatarUrl } from "@/lib/avatar"
 
@@ -44,10 +44,11 @@ const PresenceToast = ({
 }) => {
   const isJoin = presence.event === "join"
   const styles = TOAST_STYLES[theme]
+  const reduceMotion = useReducedMotion()
 
   useEffect(() => {
-    if (isJoin) welcomeConfetti()
-  }, [isJoin])
+    if (isJoin && !reduceMotion) welcomeConfetti()
+  }, [isJoin, reduceMotion])
 
   return (
     <motion.div

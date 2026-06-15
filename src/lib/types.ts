@@ -20,12 +20,28 @@ export type Participant = {
   isHost: boolean
 }
 
+export type Topic = {
+  title: string
+  url: string | null
+}
+
+export type HistoryEntry = {
+  id: string
+  title: string
+  url: string | null
+  estimate: CardValue
+  at: number
+}
+
 export type RoomState = {
   deck: Deck
   participants: Record<string, Participant>
   revealed: boolean
   speaker: string | null
   spoken: string[]
+  topic: Topic | null
+  history: HistoryEntry[]
+  autoReveal: boolean
 }
 
 export type Message =
@@ -36,6 +52,10 @@ export type Message =
   | { type: "reset" }
   | { type: "set-deck"; deck: Deck }
   | { type: "roll-speaker" }
+  | { type: "set-topic"; title: string; url: string | null }
+  | { type: "save-round"; estimate: CardValue }
+  | { type: "clear-history" }
+  | { type: "set-auto-reveal"; enabled: boolean }
   | { type: "react"; emoji: string }
   | { type: "reaction"; from: string; name: string; emoji: string }
   | {

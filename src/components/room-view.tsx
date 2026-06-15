@@ -2,7 +2,12 @@
 
 import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
-import { motion, AnimatePresence } from "framer-motion"
+import {
+  motion,
+  AnimatePresence,
+  useReducedMotion,
+  MotionConfig,
+} from "framer-motion"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { SeatAvatar } from "@/components/seat-avatar"
@@ -10,7 +15,11 @@ import { TableCard } from "@/components/table-card"
 import { PlayingCard } from "@/components/playing-card"
 import { DeckSelector } from "@/components/deck-selector"
 import { VoteSummary } from "@/components/vote-summary"
+import { TopicBar } from "@/components/topic-bar"
+import { SessionHistory } from "@/components/session-history"
+import { HostActions } from "@/components/host-actions"
 import { Deck, RoomState } from "@/lib/types"
+import { computeVoteStats } from "@/lib/vote-stats"
 import { SettingsDialog } from "@/components/settings-dialog"
 import { OnboardingHints } from "@/components/onboarding-hints"
 import { PixelPet } from "@/components/pixel-pet"
@@ -49,6 +58,10 @@ type Props = {
   onUpdateProfile?: (name: string, avatar: string) => void
   onRollSpeaker?: () => void
   onReact?: (emoji: string) => void
+  onSetTopic?: (title: string, url: string | null) => void
+  onSaveRound?: (estimate: string) => void
+  onClearHistory?: () => void
+  onSetAutoReveal?: (enabled: boolean) => void
   reactions?: Reaction[]
   presenceEvents?: PresenceEvent[]
 }
@@ -329,6 +342,10 @@ export const RoomView = ({
   onUpdateProfile,
   onRollSpeaker,
   onReact,
+  onSetTopic,
+  onSaveRound,
+  onClearHistory,
+  onSetAutoReveal,
   reactions,
   presenceEvents,
 }: Props) => {
@@ -477,15 +494,23 @@ export const RoomView = ({
     }
   }, [state.revealed, voteCount, participants.length])
 
-  const votes = participants.map((p) => p.vote).filter(Boolean)
-  const isConsensus =
-    votes.length > 1 &&
-    votes.every((v) => v === votes[0]) &&
-    !["?", "☕"].includes(votes[0]!)
+  const reduceMotion = useReducedMotion()
+  const votes = participants
+    .map((p) => p.vote)
+    .filter((v): v is string => Boolean(v))
+  const stats = computeVoteStats(votes)
+  const isConsensus = stats.consensus
+  const suggestedEstimate =
+    votes.length === 0
+      ? null
+      : isConsensus
+        ? votes[0]
+        : (stats.tally[0]?.value ?? null)
 
   useEffect(() => {
     if (!state.revealed || !isConsensus) return
     playConsensus()
+    if (reduceMotion) return
     let cancelled = false
     import("canvas-confetti").then(({ default: confetti }) => {
       if (cancelled) return
@@ -499,183 +524,304 @@ export const RoomView = ({
     return () => {
       cancelled = true
     }
-  }, [state.revealed, isConsensus])
+  }, [state.revealed, isConsensus, reduceMotion])
 
   return (
-    <div
-      className={`flex flex-col h-dvh ${s.text}`}
-      style={{ background: s.bg }}
-    >
-      {/* Header */}
-      <header
-        className={`flex-none border-b ${s.header} backdrop-blur-md px-3 sm:px-6 py-2 sm:py-3 flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5 z-30`}
+    <MotionConfig reducedMotion="user">
+      <div
+        className={`flex flex-col h-dvh ${s.text}`}
+        style={{ background: s.bg }}
       >
-        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-          <Link
-            href="/"
-            className="flex items-center gap-2 sm:gap-3 hover:opacity-80 transition-opacity"
-          >
-            <span className="text-xl">🃏</span>
-            <span className="font-semibold tracking-tight hidden md:inline">
-              Planning Poker
-            </span>
-          </Link>
-          <span
-            className="text-[11px] sm:text-xs font-mono px-2 py-0.5 rounded-full border whitespace-nowrap"
-            style={{
-              borderColor: s.badge.border,
-              color: s.badge.color,
-              background: s.badge.bg,
-            }}
-          >
-            {state.revealed
-              ? "Revealed"
-              : allVoted
-                ? "All voted ✓"
-                : `${voteCount} / ${participants.length} voted`}
-          </span>
-          {isHost && (
-            <span
-              className={cn(
-                "text-[11px] sm:text-xs px-2 py-0.5 rounded-full border whitespace-nowrap",
-                theme === "dark"
-                  ? "border-yellow-500/40 bg-yellow-500/10 text-yellow-200/90"
-                  : "border-yellow-600/40 bg-yellow-100 text-yellow-800",
-              )}
-            >
-              👑 Host
-            </span>
-          )}
-        </div>
-
-        <div className="flex items-center gap-1.5 sm:gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={toggleMuted}
-            className={`border text-sm ${s.themeBtn}`}
-            aria-label={muted ? "Unmute sounds" : "Mute sounds"}
-          >
-            {muted ? "🔇" : "🔊"}
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={toggleTheme}
-            className={`border text-sm ${s.themeBtn}`}
-          >
-            {theme === "dark" ? "☀︎" : "☾"}
-          </Button>
-          {onUpdateProfile && (
-            <SettingsDialog
-              currentName={state.participants[myId]?.name ?? ""}
-              currentAvatar={state.participants[myId]?.avatar ?? ""}
-              onSave={(name, avatar) => {
-                saveSettings({ name, avatar })
-                onUpdateProfile(name, avatar)
-              }}
-              trigger={
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className={`border text-xs ${s.themeBtn}`}
-                >
-                  Profile
-                </Button>
-              }
-            />
-          )}
-          {isHost && (onCopyCode || onCopyLink) && (
-            <ShareMenu
-              onCopyCode={onCopyCode}
-              onCopyLink={onCopyLink}
-              copiedMode={copiedMode ?? null}
-              btnClass={`border text-xs ${s.shareBtn}`}
-              popupClass={
-                theme === "dark"
-                  ? "bg-[#1a1d2e] border-white/10 text-slate-300"
-                  : "bg-white border-slate-200 text-slate-700"
-              }
-              hoverClass={
-                theme === "dark" ? "hover:bg-white/8" : "hover:bg-slate-50"
-              }
-            />
-          )}
-          {isHost && onSetDeck && (
-            <DeckSelector
-              currentDeck={state.deck}
-              onApply={onSetDeck}
-              triggerClassName={`border text-xs ${s.themeBtn}`}
-            />
-          )}
-        </div>
-      </header>
-
-      {/* Host actions — kept off the felt so cards never cover them */}
-      {isHost && (
-        <div
-          className={`flex-none border-b ${s.header} backdrop-blur-md px-3 py-2 flex items-center justify-center gap-2.5 z-10`}
+        {/* Header */}
+        <header
+          className={`flex-none border-b ${s.header} backdrop-blur-md px-3 sm:px-6 py-2 sm:py-3 flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5 z-30`}
         >
-          {!state.revealed ? (
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <Link
+              href="/"
+              className="flex items-center gap-2 sm:gap-3 hover:opacity-80 transition-opacity"
+            >
+              <span className="text-xl">🃏</span>
+              <span className="font-semibold tracking-tight hidden md:inline">
+                Planning Poker
+              </span>
+            </Link>
+            <span
+              className="text-[11px] sm:text-xs font-mono px-2 py-0.5 rounded-full border whitespace-nowrap"
+              style={{
+                borderColor: s.badge.border,
+                color: s.badge.color,
+                background: s.badge.bg,
+              }}
+            >
+              {state.revealed
+                ? "Revealed"
+                : allVoted
+                  ? "All voted ✓"
+                  : `${voteCount} / ${participants.length} voted`}
+            </span>
+            {isHost && (
+              <span
+                className={cn(
+                  "text-[11px] sm:text-xs px-2 py-0.5 rounded-full border whitespace-nowrap",
+                  theme === "dark"
+                    ? "border-yellow-500/40 bg-yellow-500/10 text-yellow-200/90"
+                    : "border-yellow-600/40 bg-yellow-100 text-yellow-800",
+                )}
+              >
+                👑 Host
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1.5 sm:gap-2">
             <Button
+              variant="ghost"
               size="sm"
-              data-tour="reveal"
-              onClick={onReveal}
+              onClick={toggleMuted}
+              className={`border text-sm ${s.themeBtn}`}
+              aria-label={muted ? "Unmute sounds" : "Mute sounds"}
+            >
+              {muted ? "🔇" : "🔊"}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={toggleTheme}
+              className={`border text-sm ${s.themeBtn}`}
+            >
+              {theme === "dark" ? "☀︎" : "☾"}
+            </Button>
+            {onClearHistory && (
+              <SessionHistory
+                history={state.history}
+                isHost={isHost}
+                onClear={onClearHistory}
+                triggerClassName={`border text-xs ${s.themeBtn}`}
+              />
+            )}
+            {onUpdateProfile && (
+              <SettingsDialog
+                currentName={state.participants[myId]?.name ?? ""}
+                currentAvatar={state.participants[myId]?.avatar ?? ""}
+                onSave={(name, avatar) => {
+                  saveSettings({ name, avatar })
+                  onUpdateProfile(name, avatar)
+                }}
+                trigger={
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className={`border text-xs ${s.themeBtn}`}
+                  >
+                    Profile
+                  </Button>
+                }
+              />
+            )}
+            {isHost && (onCopyCode || onCopyLink) && (
+              <ShareMenu
+                onCopyCode={onCopyCode}
+                onCopyLink={onCopyLink}
+                copiedMode={copiedMode ?? null}
+                btnClass={`border text-xs ${s.shareBtn}`}
+                popupClass={
+                  theme === "dark"
+                    ? "bg-[#1a1d2e] border-white/10 text-slate-300"
+                    : "bg-white border-slate-200 text-slate-700"
+                }
+                hoverClass={
+                  theme === "dark" ? "hover:bg-white/8" : "hover:bg-slate-50"
+                }
+              />
+            )}
+            {isHost && onSetDeck && (
+              <DeckSelector
+                currentDeck={state.deck}
+                onApply={onSetDeck}
+                triggerClassName={`border text-xs ${s.themeBtn}`}
+              />
+            )}
+          </div>
+        </header>
+
+        {/* Host actions — kept off the felt so cards never cover them */}
+        {isHost && (
+          <HostActions
+            revealed={state.revealed}
+            autoReveal={state.autoReveal}
+            deck={state.deck}
+            spokenCount={state.spoken.length}
+            participantCount={participants.length}
+            voteCount={voteCount}
+            suggestedEstimate={suggestedEstimate}
+            headerClass={s.header}
+            onReveal={onReveal}
+            onReset={onReset}
+            onRollSpeaker={onRollSpeaker}
+            onSaveRound={onSaveRound}
+            onSetAutoReveal={onSetAutoReveal}
+          />
+        )}
+
+        {onSetTopic && (
+          <div className={`flex-none border-b ${s.header}`}>
+            <TopicBar
+              topic={state.topic}
+              isHost={isHost}
+              theme={theme}
+              onSetTopic={onSetTopic}
+            />
+          </div>
+        )}
+
+        {/* Table area */}
+        <main className="flex-1 relative flex items-center justify-center overflow-hidden">
+          <PixelPet />
+          <PixelWaiter active={coffeeRun} onDone={() => setCoffeeRun(false)} />
+          {/* Mobile — roster grid, no table */}
+          <div className="md:hidden w-full max-h-full overflow-y-auto px-4 py-5 flex flex-col items-center gap-6">
+            <div
+              data-tour="table"
               className={cn(
-                "bg-red-700 hover:bg-red-600 text-white border border-yellow-500/40 shadow-[0_0_20px_rgba(185,28,28,0.5),inset_0_1px_0_rgba(255,220,100,0.2)] font-semibold tracking-wide",
-                voteCount === 0 && "opacity-40 pointer-events-none",
+                "grid gap-x-3 gap-y-5 justify-items-center w-full max-w-sm",
+                seated.length > 6 ? "grid-cols-4" : "grid-cols-3",
               )}
             >
-              Reveal cards
-            </Button>
-          ) : (
-            <>
-              {onRollSpeaker &&
-                participants.length > 1 &&
-                state.spoken.length < participants.length && (
-                  <Button
-                    size="sm"
-                    onClick={onRollSpeaker}
-                    className="border border-amber-400/30 bg-amber-500/15 text-amber-100 hover:bg-amber-500/25"
+              <AnimatePresence>
+                {seated.map((participant, i) => (
+                  <motion.div
+                    key={participant.id}
+                    initial={{ opacity: 0, scale: 0.5 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.5 }}
+                    transition={{
+                      type: "spring",
+                      stiffness: 300,
+                      damping: 24,
+                      delay: i * 0.04,
+                    }}
+                    className="flex flex-col items-center gap-2"
                   >
-                    🎲{" "}
-                    {state.spoken.length === 0
-                      ? "First speaker"
-                      : "Next speaker"}
-                  </Button>
-                )}
-              <Button
-                size="sm"
-                onClick={onReset}
-                className="border-white/20 bg-white/10 text-white hover:bg-white/20"
-              >
-                New round
-              </Button>
-              {participants.length > 1 && state.spoken.length > 0 && (
-                <span className="text-[10px] text-white/40 tracking-wide uppercase">
-                  {state.spoken.length >= participants.length
-                    ? "Everyone spoke 🎉"
-                    : `${state.spoken.length} of ${participants.length} spoke`}
-                </span>
-              )}
-            </>
-          )}
-        </div>
-      )}
+                    <SeatAvatar
+                      participant={participant}
+                      theme={theme}
+                      isSpeaker={participant.id === state.speaker}
+                      hasSpoken={state.spoken.includes(participant.id)}
+                    />
+                    {participant.vote !== null ? (
+                      <TableCard
+                        participant={participant}
+                        revealed={state.revealed}
+                        index={i}
+                        dealFrom={{ x: 0, y: -16 }}
+                      />
+                    ) : (
+                      <div
+                        className={cn(
+                          "w-10 h-14 rounded-lg border-2 border-dashed",
+                          theme === "dark"
+                            ? "border-white/15"
+                            : "border-slate-300",
+                        )}
+                      />
+                    )}
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </div>
+            <div
+              className="w-full max-w-sm rounded-[3rem] px-6 py-6 flex items-center justify-center"
+              style={{ ...FELT_SURFACE, border: "8px solid #6b3d12" }}
+            >
+              <RoundControls
+                state={state}
+                voteCount={voteCount}
+                allVoted={allVoted}
+                total={participants.length}
+                roomId={roomId}
+              />
+            </div>
+          </div>
 
-      {/* Table area */}
-      <main className="flex-1 relative flex items-center justify-center overflow-hidden">
-        <PixelPet />
-        <PixelWaiter active={coffeeRun} onDone={() => setCoffeeRun(false)} />
-        {/* Mobile — roster grid, no table */}
-        <div className="md:hidden w-full max-h-full overflow-y-auto px-4 py-5 flex flex-col items-center gap-6">
+          {/* Desktop — poker table */}
           <div
+            ref={tableRef}
             data-tour="table"
-            className={cn(
-              "grid gap-x-3 gap-y-5 justify-items-center w-full max-w-sm",
-              seated.length > 6 ? "grid-cols-4" : "grid-cols-3",
-            )}
+            className="relative hidden md:block"
+            style={{ width: "min(640px, 74vw)", aspectRatio: "640 / 268" }}
           >
+            <PixelDealer announcement={announcement} />
+            {/* Felt */}
+            <div
+              className="absolute inset-0"
+              style={{
+                ...FELT_SURFACE,
+                borderRadius: 9999,
+                border: "10px solid #6b3d12",
+              }}
+            >
+              <div
+                className="absolute inset-0 overflow-hidden pointer-events-none"
+                style={{ borderRadius: 9999 }}
+              >
+                <motion.div
+                  style={{
+                    position: "absolute",
+                    width: "55%",
+                    height: "160%",
+                    top: "-30%",
+                    skewX: -18,
+                    background:
+                      "linear-gradient(to right, transparent 0%, rgba(255,255,255,0.07) 50%, transparent 100%)",
+                  }}
+                  animate={{ left: ["-60%", "120%"] }}
+                  transition={{
+                    duration: 3,
+                    ease: "easeInOut",
+                    repeat: Infinity,
+                    repeatDelay: 5,
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Centre content — above the cards so stats are never covered */}
+            <div className="absolute inset-0 z-10 flex items-center justify-center px-[12%] pointer-events-none [&_*]:pointer-events-auto">
+              <RoundControls
+                state={state}
+                voteCount={voteCount}
+                allVoted={allVoted}
+                total={participants.length}
+                roomId={roomId}
+              />
+            </div>
+
+            {/* Cards on the felt — one per participant who has voted */}
+            <AnimatePresence>
+              {seated.map(
+                (participant, i) =>
+                  participant.vote !== null && (
+                    <div
+                      key={`card-${participant.id}`}
+                      className="pointer-events-none"
+                      style={cardStyle(seatAngle(i, seated.length))}
+                    >
+                      <TableCard
+                        participant={participant}
+                        revealed={state.revealed}
+                        index={i}
+                        dealFrom={{
+                          x: 70 * Math.cos(seatAngle(i, seated.length)),
+                          y: 56 * Math.sin(seatAngle(i, seated.length)),
+                        }}
+                      />
+                    </div>
+                  ),
+              )}
+            </AnimatePresence>
+
+            {/* Seats around the table — presence */}
             <AnimatePresence>
               {seated.map((participant, i) => (
                 <motion.div
@@ -687,9 +833,9 @@ export const RoomView = ({
                     type: "spring",
                     stiffness: 300,
                     damping: 24,
-                    delay: i * 0.04,
+                    delay: i * 0.05,
                   }}
-                  className="flex flex-col items-center gap-2"
+                  style={seatStyle(seatAngle(i, seated.length))}
                 >
                   <SeatAvatar
                     participant={participant}
@@ -697,320 +843,187 @@ export const RoomView = ({
                     isSpeaker={participant.id === state.speaker}
                     hasSpoken={state.spoken.includes(participant.id)}
                   />
-                  {participant.vote !== null ? (
-                    <TableCard
-                      participant={participant}
-                      revealed={state.revealed}
-                      index={i}
-                      dealFrom={{ x: 0, y: -16 }}
-                    />
-                  ) : (
-                    <div
-                      className={cn(
-                        "w-10 h-14 rounded-lg border-2 border-dashed",
-                        theme === "dark"
-                          ? "border-white/15"
-                          : "border-slate-300",
-                      )}
-                    />
-                  )}
                 </motion.div>
               ))}
             </AnimatePresence>
           </div>
-          <div
-            className="w-full max-w-sm rounded-[3rem] px-6 py-6 flex items-center justify-center"
-            style={{ ...FELT_SURFACE, border: "8px solid #6b3d12" }}
-          >
-            <RoundControls
-              state={state}
-              voteCount={voteCount}
-              allVoted={allVoted}
-              total={participants.length}
-              roomId={roomId}
-            />
-          </div>
-        </div>
+        </main>
 
-        {/* Desktop — poker table */}
+        {/* Hand */}
         <div
-          ref={tableRef}
-          data-tour="table"
-          className="relative hidden md:block"
-          style={{ width: "min(640px, 74vw)", aspectRatio: "640 / 268" }}
+          className={cn(
+            "relative flex-none border-t px-3 sm:px-6 pt-4 sm:pt-6 pb-3 sm:pb-4",
+            s.hand,
+          )}
         >
-          <PixelDealer announcement={announcement} />
-          {/* Felt */}
+          {onReact && <ReactionBar onReact={onReact} theme={theme} />}
           <div
-            className="absolute inset-0"
-            style={{
-              ...FELT_SURFACE,
-              borderRadius: 9999,
-              border: "10px solid #6b3d12",
-            }}
+            data-tour="hand"
+            className="flex flex-col items-center gap-3 sm:gap-5"
           >
-            <div
-              className="absolute inset-0 overflow-hidden pointer-events-none"
-              style={{ borderRadius: 9999 }}
-            >
-              <motion.div
-                style={{
-                  position: "absolute",
-                  width: "55%",
-                  height: "160%",
-                  top: "-30%",
-                  skewX: -18,
-                  background:
-                    "linear-gradient(to right, transparent 0%, rgba(255,255,255,0.07) 50%, transparent 100%)",
-                }}
-                animate={{ left: ["-60%", "120%"] }}
-                transition={{
-                  duration: 3,
-                  ease: "easeInOut",
-                  repeat: Infinity,
-                  repeatDelay: 5,
-                }}
-              />
-            </div>
-          </div>
-
-          {/* Centre content — above the cards so stats are never covered */}
-          <div className="absolute inset-0 z-10 flex items-center justify-center px-[12%] pointer-events-none [&_*]:pointer-events-auto">
-            <RoundControls
-              state={state}
-              voteCount={voteCount}
-              allVoted={allVoted}
-              total={participants.length}
-              roomId={roomId}
-            />
-          </div>
-
-          {/* Cards on the felt — one per participant who has voted */}
-          <AnimatePresence>
-            {seated.map(
-              (participant, i) =>
-                participant.vote !== null && (
-                  <div
-                    key={`card-${participant.id}`}
-                    className="pointer-events-none"
-                    style={cardStyle(seatAngle(i, seated.length))}
-                  >
-                    <TableCard
-                      participant={participant}
-                      revealed={state.revealed}
-                      index={i}
-                      dealFrom={{
-                        x: 70 * Math.cos(seatAngle(i, seated.length)),
-                        y: 56 * Math.sin(seatAngle(i, seated.length)),
-                      }}
-                    />
-                  </div>
-                ),
-            )}
-          </AnimatePresence>
-
-          {/* Seats around the table — presence */}
-          <AnimatePresence>
-            {seated.map((participant, i) => (
-              <motion.div
-                key={participant.id}
-                initial={{ opacity: 0, scale: 0.5 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.5 }}
-                transition={{
-                  type: "spring",
-                  stiffness: 300,
-                  damping: 24,
-                  delay: i * 0.05,
-                }}
-                style={seatStyle(seatAngle(i, seated.length))}
+            <div className="flex items-baseline gap-3">
+              <p
+                className={`text-[10px] sm:text-xs font-medium tracking-wide uppercase ${s.handLabel}`}
               >
-                <SeatAvatar
-                  participant={participant}
-                  theme={theme}
-                  isSpeaker={participant.id === state.speaker}
-                  hasSpoken={state.spoken.includes(participant.id)}
-                />
+                {state.revealed ? "Waiting for next round…" : "Your hand"}
+              </p>
+              <p
+                className={`hidden sm:block text-[10px] font-mono opacity-60 ${s.handLabel}`}
+              >
+                {isHost
+                  ? state.revealed
+                    ? "space — next speaker, then new round"
+                    : "1–9 vote · space reveal"
+                  : state.revealed
+                    ? ""
+                    : "press 1–9 to vote"}
+              </p>
+            </div>
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={state.deck.preset}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.18 }}
+                className="flex flex-wrap justify-center sm:flex-nowrap sm:overflow-x-auto gap-2 sm:gap-3 max-w-full px-2 pt-3 sm:pt-4 pb-1"
+              >
+                {state.deck.cards.map((card, i) => (
+                  <motion.div
+                    key={card.value}
+                    className="flex-none"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{
+                      delay: i * 0.04,
+                      type: "spring",
+                      stiffness: 300,
+                      damping: 22,
+                    }}
+                  >
+                    <PlayingCard
+                      card={card}
+                      selected={me?.vote === card.value}
+                      disabled={state.revealed}
+                      onSelect={handleVote}
+                      hotkey={i < 9 ? String(i + 1) : i === 9 ? "0" : undefined}
+                    />
+                  </motion.div>
+                ))}
               </motion.div>
-            ))}
-          </AnimatePresence>
-        </div>
-      </main>
-
-      {/* Hand */}
-      <div
-        className={cn(
-          "relative flex-none border-t px-3 sm:px-6 pt-4 sm:pt-6 pb-3 sm:pb-4",
-          s.hand,
-        )}
-      >
-        {onReact && <ReactionBar onReact={onReact} theme={theme} />}
-        <div
-          data-tour="hand"
-          className="flex flex-col items-center gap-3 sm:gap-5"
-        >
-          <div className="flex items-baseline gap-3">
-            <p
-              className={`text-[10px] sm:text-xs font-medium tracking-wide uppercase ${s.handLabel}`}
-            >
-              {state.revealed ? "Waiting for next round…" : "Your hand"}
-            </p>
-            <p
-              className={`hidden sm:block text-[10px] font-mono opacity-60 ${s.handLabel}`}
-            >
-              {isHost
-                ? state.revealed
-                  ? "space — next speaker, then new round"
-                  : "1–9 vote · space reveal"
-                : state.revealed
-                  ? ""
-                  : "press 1–9 to vote"}
-            </p>
+            </AnimatePresence>
           </div>
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={state.deck.preset}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.18 }}
-              className="flex flex-wrap justify-center sm:flex-nowrap sm:overflow-x-auto gap-2 sm:gap-3 max-w-full px-2 pt-3 sm:pt-4 pb-1"
-            >
-              {state.deck.cards.map((card, i) => (
-                <motion.div
-                  key={card.value}
-                  className="flex-none"
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{
-                    delay: i * 0.04,
-                    type: "spring",
-                    stiffness: 300,
-                    damping: 22,
-                  }}
-                >
-                  <PlayingCard
-                    card={card}
-                    selected={me?.vote === card.value}
-                    disabled={state.revealed}
-                    onSelect={handleVote}
-                    hotkey={i < 9 ? String(i + 1) : i === 9 ? "0" : undefined}
-                  />
-                </motion.div>
-              ))}
-            </motion.div>
-          </AnimatePresence>
         </div>
-      </div>
 
-      <OnboardingHints isHost={isHost} />
+        <OnboardingHints isHost={isHost} />
 
-      {reactions && <FloatingReactions reactions={reactions} />}
+        {reactions && <FloatingReactions reactions={reactions} />}
 
-      {presenceEvents && (
-        <PresenceToasts events={presenceEvents} theme={theme} />
-      )}
+        {presenceEvents && (
+          <PresenceToasts events={presenceEvents} theme={theme} />
+        )}
 
-      {/* Dealer announcements on mobile — the pixel dealer handles desktop */}
-      <AnimatePresence>
-        {announcement && (
-          <div className="fixed inset-0 z-30 flex items-center justify-center pointer-events-none md:hidden">
+        {/* Dealer announcements on mobile — the pixel dealer handles desktop */}
+        <AnimatePresence>
+          {announcement && (
+            <div className="fixed inset-0 z-30 flex items-center justify-center pointer-events-none md:hidden">
+              <motion.div
+                initial={{ scale: 0.6, opacity: 0, y: 24 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.92, opacity: 0, y: -16 }}
+                transition={{ type: "spring", stiffness: 320, damping: 22 }}
+                className="flex items-center gap-3 rounded-full border-2 border-yellow-500/60 bg-[#10131f]/90 backdrop-blur-md px-6 py-3 shadow-[0_0_40px_rgba(234,179,8,0.3)]"
+              >
+                <span className="text-2xl">{announcement.emoji}</span>
+                <div className="flex flex-col">
+                  <span className="text-sm font-semibold text-yellow-100 tracking-wide">
+                    {announcement.title}
+                  </span>
+                  <span className="text-xs text-yellow-200/60 italic">
+                    {announcement.sub}
+                  </span>
+                </div>
+                <span className="text-2xl">🃏</span>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* Speaker pick — dice roll then the floor is yours */}
+        <AnimatePresence>
+          {state.speaker && state.participants[state.speaker] && (
             <motion.div
-              initial={{ scale: 0.6, opacity: 0, y: 24 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.92, opacity: 0, y: -16 }}
-              transition={{ type: "spring", stiffness: 320, damping: 22 }}
-              className="flex items-center gap-3 rounded-full border-2 border-yellow-500/60 bg-[#10131f]/90 backdrop-blur-md px-6 py-3 shadow-[0_0_40px_rgba(234,179,8,0.3)]"
+              key={state.speaker}
+              initial={{ opacity: 0, y: -12, scale: 0.9 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -12, scale: 0.9 }}
+              transition={{ type: "spring", stiffness: 320, damping: 24 }}
+              className="absolute top-28 inset-x-0 z-30 hidden sm:flex justify-center pointer-events-none"
             >
-              <span className="text-2xl">{announcement.emoji}</span>
-              <div className="flex flex-col">
-                <span className="text-sm font-semibold text-yellow-100 tracking-wide">
-                  {announcement.title}
-                </span>
-                <span className="text-xs text-yellow-200/60 italic">
-                  {announcement.sub}
+              <div className="flex items-center gap-2.5 rounded-full border border-amber-400/40 bg-[#10131f]/90 backdrop-blur-md px-4 py-2 shadow-[0_8px_30px_rgba(0,0,0,0.4)]">
+                {rollingDice ? (
+                  <motion.span
+                    animate={{ rotate: 720 }}
+                    transition={{ duration: 0.85, ease: "easeOut" }}
+                    className="text-lg"
+                  >
+                    🎲
+                  </motion.span>
+                ) : (
+                  <span className="text-lg">🎤</span>
+                )}
+                <span className="text-sm font-medium text-amber-100">
+                  {rollingDice
+                    ? "Rolling…"
+                    : `${state.participants[state.speaker].name}, the floor is yours`}
+                  {!rollingDice && state.spoken.length > 0 && (
+                    <span className="text-amber-200/50 ml-2 text-xs">
+                      {state.spoken.length}/
+                      {Object.keys(state.participants).length}
+                    </span>
+                  )}
                 </span>
               </div>
-              <span className="text-2xl">🃏</span>
             </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+          )}
+        </AnimatePresence>
 
-      {/* Speaker pick — dice roll then the floor is yours */}
-      <AnimatePresence>
-        {state.speaker && state.participants[state.speaker] && (
-          <motion.div
-            key={state.speaker}
-            initial={{ opacity: 0, y: -12, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -12, scale: 0.9 }}
-            transition={{ type: "spring", stiffness: 320, damping: 24 }}
-            className="absolute top-28 inset-x-0 z-30 hidden sm:flex justify-center pointer-events-none"
-          >
-            <div className="flex items-center gap-2.5 rounded-full border border-amber-400/40 bg-[#10131f]/90 backdrop-blur-md px-4 py-2 shadow-[0_8px_30px_rgba(0,0,0,0.4)]">
-              {rollingDice ? (
-                <motion.span
-                  animate={{ rotate: 720 }}
-                  transition={{ duration: 0.85, ease: "easeOut" }}
-                  className="text-lg"
-                >
-                  🎲
-                </motion.span>
-              ) : (
-                <span className="text-lg">🎤</span>
+        {/* Flying card — travels from hand to table on vote */}
+        <AnimatePresence>
+          {flyingCard && (
+            <motion.div
+              key={flyingCard.value + "-fly"}
+              className="fixed z-50 pointer-events-none flex flex-col items-center justify-center w-20 h-28 rounded-xl border-2 border-primary bg-[#fffdf7] shadow-[0_0_28px_rgba(99,102,241,0.65)]"
+              style={{
+                left: flyingCard.startX - 40,
+                top: flyingCard.startY - 56,
+              }}
+              initial={{ x: 0, y: 0, scale: 1, rotate: 0, opacity: 1 }}
+              animate={{
+                x: [0, flyingCard.dx, flyingCard.dx],
+                y: [0, flyingCard.dy, flyingCard.dy],
+                scale: [1, 0.78, 0.6],
+                rotate: [0, -8, 0],
+                opacity: [1, 1, 0],
+              }}
+              transition={{
+                duration: 0.75,
+                times: [0, 0.62, 1],
+                ease: "easeOut",
+              }}
+            >
+              <span className="text-2xl font-bold text-slate-800">
+                {flyingCard.value}
+              </span>
+              {flyingCard.label && (
+                <span className="text-[11px] font-semibold text-slate-400 mt-1">
+                  {flyingCard.label}
+                </span>
               )}
-              <span className="text-sm font-medium text-amber-100">
-                {rollingDice
-                  ? "Rolling…"
-                  : `${state.participants[state.speaker].name}, the floor is yours`}
-                {!rollingDice && state.spoken.length > 0 && (
-                  <span className="text-amber-200/50 ml-2 text-xs">
-                    {state.spoken.length}/
-                    {Object.keys(state.participants).length}
-                  </span>
-                )}
-              </span>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Flying card — travels from hand to table on vote */}
-      <AnimatePresence>
-        {flyingCard && (
-          <motion.div
-            key={flyingCard.value + "-fly"}
-            className="fixed z-50 pointer-events-none flex flex-col items-center justify-center w-20 h-28 rounded-xl border-2 border-primary bg-[#fffdf7] shadow-[0_0_28px_rgba(99,102,241,0.65)]"
-            style={{
-              left: flyingCard.startX - 40,
-              top: flyingCard.startY - 56,
-            }}
-            initial={{ x: 0, y: 0, scale: 1, rotate: 0, opacity: 1 }}
-            animate={{
-              x: [0, flyingCard.dx, flyingCard.dx],
-              y: [0, flyingCard.dy, flyingCard.dy],
-              scale: [1, 0.78, 0.6],
-              rotate: [0, -8, 0],
-              opacity: [1, 1, 0],
-            }}
-            transition={{
-              duration: 0.75,
-              times: [0, 0.62, 1],
-              ease: "easeOut",
-            }}
-          >
-            <span className="text-2xl font-bold text-slate-800">
-              {flyingCard.value}
-            </span>
-            {flyingCard.label && (
-              <span className="text-[11px] font-semibold text-slate-400 mt-1">
-                {flyingCard.label}
-              </span>
-            )}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </MotionConfig>
   )
 }
