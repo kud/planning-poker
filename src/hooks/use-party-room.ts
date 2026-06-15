@@ -6,6 +6,21 @@ import { CardValue, Deck, Message, RoomState } from "@/lib/types"
 
 export type ConnectionStatus = "connecting" | "connected" | "reconnecting"
 
+// Fill in any fields an older/partial server might omit, so the room never
+// crashes on a version mismatch (e.g. mid-deploy when client and server differ).
+const normalizeState = (s: Partial<RoomState>): RoomState => ({
+  deck: s.deck ?? { preset: "fibonacci", cards: [] },
+  participants: s.participants ?? {},
+  revealed: s.revealed ?? false,
+  speaker: s.speaker ?? null,
+  spoken: s.spoken ?? [],
+  topic: s.topic ?? null,
+  history: s.history ?? [],
+  autoReveal: s.autoReveal ?? false,
+  rageEnabled: s.rageEnabled ?? false,
+  timer: s.timer ?? null,
+})
+
 export type RagePlayer = {
   x: number
   y: number
@@ -96,7 +111,7 @@ export const usePartyRoom = ({
       } catch {
         return
       }
-      if (msg.type === "state") setState(msg.state)
+      if (msg.type === "state") setState(normalizeState(msg.state))
       if (msg.type === "reaction") {
         const id = ++reactionId.current
         setReactions((current) => [

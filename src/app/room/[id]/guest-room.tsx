@@ -3,6 +3,7 @@
 import { useEffect, useRef, useSyncExternalStore } from "react"
 import Link from "next/link"
 import { RoomView } from "@/components/room-view"
+import { RoomErrorBoundary } from "@/components/error-boundary"
 import { usePartyRoom } from "@/hooks/use-party-room"
 import { useShareRoom } from "@/hooks/use-share-room"
 import { loadPreferredDeck, savePreferredDeck, touchRoom } from "@/lib/settings"
@@ -151,7 +152,7 @@ const GuestRoomConnected = ({
   const isHost = state.participants[clientId]?.isHost ?? false
 
   return (
-    <>
+    <RoomErrorBoundary>
       {status === "reconnecting" && (
         <div className="fixed inset-x-0 top-0 z-50 flex items-center justify-center gap-2 bg-amber-500/95 px-3 py-1.5 text-sm font-medium text-amber-950 shadow-md">
           <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-amber-900" />
@@ -195,6 +196,6 @@ const GuestRoomConnected = ({
         copiedMode={copiedMode}
         onUpdateProfile={updateProfile}
       />
-    </>
+    </RoomErrorBoundary>
   )
 }
