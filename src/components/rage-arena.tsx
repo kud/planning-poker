@@ -30,6 +30,7 @@ const PUNCH_MS = 280
 const DAMAGE = 14
 const CHAIR_DAMAGE = 30
 const CHAIR_GRAB_RANGE = 0.16
+const CHAIR_DROP_MS = 450
 const HIT_COOLDOWN = 550
 const INTRO_MS = 2200
 
@@ -171,6 +172,8 @@ export const RageArena = ({
   const keys = useRef<Set<string>>(new Set())
   const target = useRef<{ x: number; y: number } | null>(null)
   const punchUntil = useRef(0)
+  const spaceHeld = useRef(false)
+  const spaceDownAt = useRef(0)
   const lastSent = useRef(0)
   const lastHitFrom = useRef<Map<string, number>>(new Map())
   const bloodId = useRef(0)
@@ -390,15 +393,23 @@ export const RageArena = ({
       if (["arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(k))
         e.preventDefault()
       if (k === " ") {
-        if (Date.now() > punchUntil.current) playPunch()
-        punchUntil.current = Date.now() + PUNCH_MS
+        if (!spaceHeld.current) {
+          spaceHeld.current = true
+          spaceDownAt.current = Date.now()
+          playPunch()
+          punchUntil.current = Date.now() + PUNCH_MS
+        }
         return
       }
       if (k === "escape") return onExit()
       keys.current.add(k)
       target.current = null
     }
-    const up = (e: KeyboardEvent) => keys.current.delete(e.key.toLowerCase())
+    const up = (e: KeyboardEvent) => {
+      const k = e.key.toLowerCase()
+      if (k === " ") spaceHeld.current = false
+      keys.current.delete(k)
+    }
     window.addEventListener("keydown", down)
     window.addEventListener("keyup", up)
     return () => {
@@ -598,9 +609,17 @@ export const RageArena = ({
         }
       }
 
-      // --- chair follows its holder; drops when the holder dies ---
+      // --- chair follows its holder; drops on death or a long space-hold ---
       {
         const ch = chair.current
+        // Hold space for a beat to drop the chair where you stand.
+        if (
+          ch.heldBy === myId &&
+          spaceHeld.current &&
+          now - spaceDownAt.current > CHAIR_DROP_MS
+        ) {
+          ch.heldBy = null
+        }
         if (ch.heldBy) {
           const holder =
             ch.heldBy === myId
@@ -664,7 +683,10 @@ export const RageArena = ({
           }
           const fist = fistRefs.current.get(id)
           if (fist) {
-            fist.style.opacity = isPunching && !isDead ? "1" : "0"
+            // No fist when this fighter is swinging the chair instead.
+            const holdsChair = chair.current.heldBy === id
+            fist.style.opacity =
+              isPunching && !isDead && !holdsChair ? "1" : "0"
             fist.style.transform = isPunching
               ? "translateX(10px)"
               : "translateX(0)"
@@ -1048,7 +1070,7 @@ export const RageArena = ({
       <div className="relative z-10 flex flex-wrap items-center justify-center gap-3 px-4 py-3 text-center text-xs text-white/55">
         {chairHeldByMe ? (
           <span className="font-semibold text-red-300">
-            🪑 Chair grabbed — punches hit harder!
+            🪑 Chair grabbed — hits harder · hold Space to drop it
           </span>
         ) : (
           <span className="hidden sm:inline">
