@@ -30,8 +30,8 @@ export const TopicBar = ({ topic, isHost, theme, onSetTopic }: Props) => {
   const link = `underline underline-offset-2 hover:opacity-80 cursor-pointer ${muted}`
   const btnClass =
     theme === "dark"
-      ? "border-white/15 text-slate-200 hover:bg-white/10"
-      : "border-slate-300 text-slate-700 hover:bg-slate-100"
+      ? "border-white/15 text-slate-200 hover:bg-white/10 hover:text-white dark:hover:bg-white/10"
+      : "border-slate-300 text-slate-700 hover:bg-slate-100 hover:text-slate-900"
 
   const open = () => {
     setTitle(topic?.title ?? "")

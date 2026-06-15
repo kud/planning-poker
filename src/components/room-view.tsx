@@ -452,6 +452,9 @@ export const RoomView = ({
     if (was === state.revealed) return
     if (state.revealed) playReveal()
     else playNewRound()
+    // Coffee card revealed → the waiter wanders in (visible here, unlike during
+    // an active break where the full-screen overlay would hide him).
+    if (state.revealed && latestVotes.current.includes("☕")) setCoffeeRun(true)
     setAnnouncement(
       state.revealed
         ? revealQuip(latestVotes.current)
@@ -685,6 +688,7 @@ export const RoomView = ({
                 history={state.history}
                 deck={state.deck}
                 isHost={isHost}
+                theme={theme}
                 onClear={onClearHistory}
                 onEdit={onEditHistory}
                 triggerClassName={`border text-xs ${s.themeBtn}`}

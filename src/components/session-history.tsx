@@ -1,13 +1,8 @@
 "use client"
 
 import { useState } from "react"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
+import { createPortal } from "react-dom"
+import { motion, AnimatePresence } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Deck, HistoryEntry } from "@/lib/types"
@@ -25,6 +20,7 @@ type Props = {
   history: HistoryEntry[]
   deck: Deck
   isHost: boolean
+  theme?: "dark" | "light"
   triggerClassName?: string
   onClear: () => void
   onEdit?: EditFn
@@ -146,10 +142,12 @@ export const SessionHistory = ({
   history,
   deck,
   isHost,
+  theme = "dark",
   triggerClassName,
   onClear,
   onEdit,
 }: Props) => {
+  const [open, setOpen] = useState(false)
   const [copied, setCopied] = useState<"md" | "csv" | null>(null)
 
   const copy = async (kind: "md" | "csv") => {
@@ -159,61 +157,111 @@ export const SessionHistory = ({
     setTimeout(() => setCopied(null), 1500)
   }
 
+  const panel =
+    theme === "light"
+      ? "border-slate-200 bg-white text-slate-900"
+      : "border-white/10 bg-[#10131f] text-white"
+
   return (
-    <Dialog>
-      <DialogTrigger
-        render={
-          <Button variant="ghost" size="sm" className={triggerClassName} />
-        }
+    <>
+      <Button
+        variant="ghost"
+        size="sm"
+        className={triggerClassName}
+        onClick={() => setOpen(true)}
       >
         🗂 History{history.length > 0 ? ` · ${history.length}` : ""}
-      </DialogTrigger>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Session history</DialogTitle>
-        </DialogHeader>
+      </Button>
 
-        {history.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-4">
-            No rounds saved yet. After revealing, the host can save the agreed
-            estimate to build a running list you can copy back into your
-            tracker.
-          </p>
-        ) : (
-          <>
-            <ul className="flex flex-col gap-1.5 max-h-[60vh] overflow-y-auto pr-1">
-              {history.map((entry) => (
-                <HistoryRow
-                  key={entry.id}
-                  entry={entry}
-                  deck={deck}
-                  isHost={isHost}
-                  onEdit={onEdit}
+      {typeof document !== "undefined" &&
+        createPortal(
+          <AnimatePresence>
+            {open && (
+              <>
+                <motion.div
+                  className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-[1px]"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() => setOpen(false)}
                 />
-              ))}
-            </ul>
-
-            <div className="flex flex-wrap items-center gap-2 pt-2">
-              <Button size="sm" variant="secondary" onClick={() => copy("md")}>
-                {copied === "md" ? "Copied ✓" : "Copy as Markdown"}
-              </Button>
-              <Button size="sm" variant="secondary" onClick={() => copy("csv")}>
-                {copied === "csv" ? "Copied ✓" : "Copy as CSV"}
-              </Button>
-              {isHost && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={onClear}
-                  className="ml-auto text-destructive"
+                <motion.aside
+                  className={cn(
+                    "fixed right-0 top-0 z-[71] flex h-full w-80 max-w-[90vw] flex-col gap-3 border-l p-4 shadow-2xl sm:w-96",
+                    panel,
+                  )}
+                  initial={{ x: "100%" }}
+                  animate={{ x: 0 }}
+                  exit={{ x: "100%" }}
+                  transition={{ type: "spring", stiffness: 380, damping: 36 }}
                 >
-                  Clear
-                </Button>
-              )}
-            </div>
-          </>
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-sm font-semibold">
+                      🗂 Session history
+                    </h2>
+                    <button
+                      onClick={() => setOpen(false)}
+                      aria-label="Close history"
+                      className="rounded-md px-2 py-1 text-muted-foreground hover:text-foreground"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  {history.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      No rounds saved yet. After revealing, the host can save
+                      the agreed estimate to build a running list you can copy
+                      back into your tracker.
+                    </p>
+                  ) : (
+                    <>
+                      <ul className="flex flex-1 flex-col gap-1.5 overflow-y-auto pr-1">
+                        {history.map((entry) => (
+                          <HistoryRow
+                            key={entry.id}
+                            entry={entry}
+                            deck={deck}
+                            isHost={isHost}
+                            onEdit={onEdit}
+                          />
+                        ))}
+                      </ul>
+
+                      <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => copy("md")}
+                        >
+                          {copied === "md" ? "Copied ✓" : "Copy as Markdown"}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => copy("csv")}
+                        >
+                          {copied === "csv" ? "Copied ✓" : "Copy as CSV"}
+                        </Button>
+                        {isHost && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={onClear}
+                            className="ml-auto text-destructive"
+                          >
+                            Clear
+                          </Button>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </motion.aside>
+              </>
+            )}
+          </AnimatePresence>,
+          document.body,
         )}
-      </DialogContent>
-    </Dialog>
+    </>
   )
 }
