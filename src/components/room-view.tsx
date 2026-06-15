@@ -119,8 +119,8 @@ const revealQuip = (votes: string[]): Announcement => {
   if (votes.includes("☕"))
     return {
       emoji: "☕",
-      title: "Coffee break?",
-      sub: "Someone played the coffee card",
+      title: "Someone wants a breather",
+      sub: "Tap ☕ Break in the header to put it to a vote",
     }
   if (numbers.length >= 1) {
     const top = Math.max(...numbers)
