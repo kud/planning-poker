@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { createPortal } from "react-dom"
-import { X } from "lucide-react"
+import { X, Pencil } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -56,6 +56,12 @@ const HistoryRow = ({
   const badgeCls = dark
     ? "bg-indigo-500/25 text-indigo-200"
     : "bg-indigo-100 text-indigo-700"
+  const inputCls = cn(
+    "h-9 text-sm",
+    dark
+      ? "border-white/15 bg-white/5 text-white placeholder:text-white/40 focus-visible:border-indigo-400/60 focus-visible:ring-indigo-400/25"
+      : "border-slate-300 bg-white text-slate-900",
+  )
 
   const open = () => {
     setTitle(entry.title)
@@ -85,14 +91,14 @@ const HistoryRow = ({
           onChange={(e) => setTitle(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && save()}
           placeholder="Story name"
-          className="h-8 text-sm"
+          className={inputCls}
         />
         <Input
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && save()}
           placeholder="Link (optional)"
-          className="h-8 text-sm"
+          className={inputCls}
         />
         <div className="flex flex-wrap items-center gap-1">
           <span className={cn("mr-1 text-xs", subCls)}>Estimate</span>
@@ -167,11 +173,13 @@ const HistoryRow = ({
           onClick={open}
           aria-label="Edit story"
           className={cn(
-            "shrink-0 rounded-md px-1.5 py-1 text-xs opacity-0 transition-opacity group-hover:opacity-100",
-            subCls,
+            "shrink-0 rounded-md p-1.5 opacity-0 transition group-hover:opacity-100",
+            dark
+              ? "text-white/50 hover:bg-white/10 hover:text-white"
+              : "text-slate-400 hover:bg-slate-100 hover:text-slate-700",
           )}
         >
-          ✏️
+          <Pencil className="h-3.5 w-3.5" />
         </button>
       )}
       <span
