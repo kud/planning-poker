@@ -146,3 +146,18 @@
   background-size: 300% 300%;
   animation: gradient-flow 10s ease infinite;
 }
+
+/* Compositor-driven crowd bob — cheaper than JS animation for many sprites */
+@keyframes arena-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+.animate-arena-bob {
+  animation: arena-bob 0.6s ease-in-out infinite;
+  will-change: transform;
+}

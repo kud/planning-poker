@@ -8,6 +8,7 @@ import {
   useReducedMotion,
   MotionConfig,
 } from "framer-motion"
+import { Monitor, Moon, Sun } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { SeatAvatar } from "@/components/seat-avatar"
@@ -637,7 +638,13 @@ export const RoomView = ({
               aria-label={`Theme: ${themePref}`}
               className={`border text-sm ${s.themeBtn}`}
             >
-              {themePref === "system" ? "🖥" : themePref === "dark" ? "☾" : "☀︎"}
+              {themePref === "system" ? (
+                <Monitor className="h-4 w-4" />
+              ) : themePref === "dark" ? (
+                <Moon className="h-4 w-4" />
+              ) : (
+                <Sun className="h-4 w-4" />
+              )}
             </Button>
             {onClearHistory && (
               <SessionHistory
