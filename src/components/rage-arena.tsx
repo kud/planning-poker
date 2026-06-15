@@ -88,6 +88,8 @@ export const RageArena = ({
   const chairRef = useRef<HTMLDivElement>(null)
   const chairMineRef = useRef(false)
   const [chairHeldByMe, setChairHeldByMe] = useState(false)
+  const [scheme, setScheme] = useState<"wasd" | "zqsd">("wasd")
+  const schemeRef = useRef<"wasd" | "zqsd">("wasd")
   const me = useRef({
     x: seedX(myId),
     y: seedY(myId),
@@ -161,6 +163,24 @@ export const RageArena = ({
     playBell()
     const t = setTimeout(() => setIntro(false), INTRO_MS)
     return () => clearTimeout(t)
+  }, [])
+
+  useEffect(() => {
+    schemeRef.current = scheme
+  }, [scheme])
+
+  // Auto-detect AZERTY where the browser exposes the layout (Chromium only).
+  useEffect(() => {
+    const kb = (
+      navigator as Navigator & {
+        keyboard?: { getLayoutMap?: () => Promise<Map<string, string>> }
+      }
+    ).keyboard
+    kb?.getLayoutMap?.()
+      .then((map) => {
+        if (map.get("KeyW") === "z") setScheme("zqsd")
+      })
+      .catch(() => {})
   }, [])
 
   // Host-triggered restart arrives as a signal — revive everyone locally.
@@ -286,10 +306,10 @@ export const RageArena = ({
       // --- update me ---
       if (!intro && m.hp > 0) {
         const k = keys.current
-        // WASD (QWERTY) + ZQSD (AZERTY) + arrows
-        const left = k.has("arrowleft") || k.has("a") || k.has("q")
+        const azerty = schemeRef.current === "zqsd"
+        const left = k.has("arrowleft") || k.has(azerty ? "q" : "a")
         const right = k.has("arrowright") || k.has("d")
-        const upK = k.has("arrowup") || k.has("w") || k.has("z")
+        const upK = k.has("arrowup") || k.has(azerty ? "z" : "w")
         const downK = k.has("arrowdown") || k.has("s")
         if (left || right || upK || downK) {
           m.vx += (Number(right) - Number(left)) * ACCEL
@@ -756,8 +776,15 @@ export const RageArena = ({
           </span>
         ) : (
           <span className="hidden sm:inline">
-            WASD / ZQSD / arrows to move · Space to punch · drag on touch ·
-            punch the 🪑 to grab it
+            <button
+              onClick={() => setScheme((s) => (s === "wasd" ? "zqsd" : "wasd"))}
+              title="Click to switch keyboard layout"
+              className="font-semibold text-white/80 underline underline-offset-2 hover:text-white"
+            >
+              {scheme === "wasd" ? "WASD" : "ZQSD"}
+            </button>{" "}
+            / arrows to move · Space to punch · drag on touch · punch the 🪑 to
+            grab it
           </span>
         )}
         <button
