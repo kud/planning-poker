@@ -234,116 +234,123 @@ export const SessionHistory = ({
             {open && (
               <>
                 <motion.div
-                  className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-[1px]"
+                  className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                   onClick={() => setOpen(false)}
-                />
-                <motion.aside
-                  className={cn(
-                    "fixed right-0 top-0 z-[71] flex h-full w-80 max-w-[90vw] flex-col gap-3 border-l p-4 shadow-2xl sm:w-96",
-                    panel,
-                  )}
-                  initial={{ x: "100%" }}
-                  animate={{ x: 0 }}
-                  exit={{ x: "100%" }}
-                  transition={{ type: "spring", stiffness: 380, damping: 36 }}
                 >
-                  <div
+                  <motion.div
                     className={cn(
-                      "-mx-4 -mt-4 mb-1 flex items-center justify-between border-b px-4 py-3.5",
-                      divide,
+                      "relative flex max-h-[82vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border shadow-2xl",
+                      panel,
                     )}
+                    initial={{ scale: 0.95, opacity: 0, y: 12 }}
+                    animate={{ scale: 1, opacity: 1, y: 0 }}
+                    exit={{ scale: 0.96, opacity: 0, y: 12 }}
+                    transition={{ type: "spring", stiffness: 360, damping: 30 }}
+                    onClick={(e) => e.stopPropagation()}
                   >
-                    <h2 className="flex items-center gap-2 text-base font-bold tracking-tight">
-                      <span aria-hidden>🗂</span>
-                      Session history
-                      {history.length > 0 && (
-                        <span
-                          className={cn(
-                            "rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums",
-                            dark
-                              ? "bg-white/10 text-white/70"
-                              : "bg-slate-100 text-slate-500",
-                          )}
-                        >
-                          {history.length}
-                        </span>
-                      )}
-                    </h2>
-                    <button
-                      onClick={() => setOpen(false)}
-                      aria-label="Close history"
+                    <div
                       className={cn(
-                        "rounded-lg p-1.5 transition-colors",
-                        dark
-                          ? "text-white/50 hover:bg-white/10 hover:text-white"
-                          : "text-slate-400 hover:bg-slate-100 hover:text-slate-700",
+                        "flex items-center justify-between border-b px-5 py-4",
+                        divide,
                       )}
                     >
-                      <X className="h-4 w-4" />
-                    </button>
-                  </div>
-
-                  {history.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                      No rounds saved yet. After revealing, the host can save
-                      the agreed estimate to build a running list you can copy
-                      back into your tracker.
-                    </p>
-                  ) : (
-                    <>
-                      <ul className="flex flex-1 flex-col gap-1.5 overflow-y-auto pr-1">
-                        {history.map((entry, i) => (
-                          <HistoryRow
-                            key={entry.id}
-                            entry={entry}
-                            index={i}
-                            deck={deck}
-                            isHost={isHost}
-                            theme={theme}
-                            onEdit={onEdit}
-                          />
-                        ))}
-                      </ul>
-
-                      <div
+                      <h2 className="flex items-center gap-2 text-base font-bold tracking-tight">
+                        <span aria-hidden>🗂</span>
+                        Session history
+                        {history.length > 0 && (
+                          <span
+                            className={cn(
+                              "rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums",
+                              dark
+                                ? "bg-white/10 text-white/70"
+                                : "bg-slate-100 text-slate-500",
+                            )}
+                          >
+                            {history.length}
+                          </span>
+                        )}
+                      </h2>
+                      <button
+                        onClick={() => setOpen(false)}
+                        aria-label="Close history"
                         className={cn(
-                          "-mx-4 -mb-4 flex flex-wrap items-center gap-2 border-t px-4 pb-4 pt-3",
-                          divide,
+                          "rounded-lg p-1.5 transition-colors",
+                          dark
+                            ? "text-white/50 hover:bg-white/10 hover:text-white"
+                            : "text-slate-400 hover:bg-slate-100 hover:text-slate-700",
                         )}
                       >
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => copy("md")}
-                          className={copyBtn}
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+
+                    {history.length === 0 ? (
+                      <p
+                        className={cn(
+                          "px-5 py-10 text-center text-sm",
+                          dark ? "text-white/50" : "text-slate-500",
+                        )}
+                      >
+                        No rounds saved yet. After revealing, the host can save
+                        the agreed estimate to build a running list you can copy
+                        back into your tracker.
+                      </p>
+                    ) : (
+                      <>
+                        <ul className="flex flex-1 flex-col gap-1.5 overflow-y-auto px-4 py-3">
+                          {history.map((entry, i) => (
+                            <HistoryRow
+                              key={entry.id}
+                              entry={entry}
+                              index={i}
+                              deck={deck}
+                              isHost={isHost}
+                              theme={theme}
+                              onEdit={onEdit}
+                            />
+                          ))}
+                        </ul>
+
+                        <div
+                          className={cn(
+                            "flex flex-wrap items-center gap-2 border-t px-5 py-4",
+                            divide,
+                          )}
                         >
-                          {copied === "md" ? "Copied ✓" : "Copy as Markdown"}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => copy("csv")}
-                          className={copyBtn}
-                        >
-                          {copied === "csv" ? "Copied ✓" : "Copy as CSV"}
-                        </Button>
-                        {isHost && (
                           <Button
                             size="sm"
                             variant="ghost"
-                            onClick={onClear}
-                            className={clearBtn}
+                            onClick={() => copy("md")}
+                            className={copyBtn}
                           >
-                            Clear
+                            {copied === "md" ? "Copied ✓" : "Copy as Markdown"}
                           </Button>
-                        )}
-                      </div>
-                    </>
-                  )}
-                </motion.aside>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => copy("csv")}
+                            className={copyBtn}
+                          >
+                            {copied === "csv" ? "Copied ✓" : "Copy as CSV"}
+                          </Button>
+                          {isHost && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={onClear}
+                              className={clearBtn}
+                            >
+                              Clear
+                            </Button>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </motion.div>
+                </motion.div>
               </>
             )}
           </AnimatePresence>,
