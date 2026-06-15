@@ -272,19 +272,20 @@ export const playRageStart = () => {
   )
 }
 
-// Crowd cheer — wide-band noise with a quick swell and a long, ragged decay.
+// Crowd cheer — a sustained roar (not a single swoosh): bandpassed noise held
+// for a few seconds with a ragged amplitude flutter so it reads as many voices.
 export const playCheer = (volume = 0.05) => {
   const audio = audioContext()
   if (!audio || isMuted()) return
   const start = audio.currentTime
-  const duration = 1.4
+  const duration = 3.2
   const length = Math.ceil(audio.sampleRate * duration)
   const buffer = audio.createBuffer(1, length, audio.sampleRate)
   const data = buffer.getChannelData(0)
   let smoothed = 0
   for (let i = 0; i < length; i++) {
     const white = Math.random() * 2 - 1
-    smoothed = 0.6 * smoothed + 0.4 * white
+    smoothed = 0.55 * smoothed + 0.45 * white
     data[i] = smoothed
   }
   const source = audio.createBufferSource()
@@ -292,17 +293,32 @@ export const playCheer = (volume = 0.05) => {
 
   const bandpass = audio.createBiquadFilter()
   bandpass.type = "bandpass"
-  bandpass.frequency.value = 1100
-  bandpass.Q.value = 0.5
+  bandpass.frequency.value = 1500
+  bandpass.Q.value = 0.4
 
   const gain = audio.createGain()
+  // Quick rise, long sustained roar, gentle fade — not a single wave.
   gain.gain.setValueAtTime(0.0001, start)
-  gain.gain.linearRampToValueAtTime(volume, start + 0.18)
-  gain.gain.linearRampToValueAtTime(volume * 0.7, start + 0.6)
+  gain.gain.linearRampToValueAtTime(volume, start + 0.25)
+  gain.gain.linearRampToValueAtTime(volume * 0.92, start + 2.2)
+  gain.gain.linearRampToValueAtTime(volume * 0.78, start + 2.7)
   gain.gain.exponentialRampToValueAtTime(0.0001, start + duration)
+
+  // Flutter LFO → the "rrra-rrra" texture of a crowd rather than smooth noise.
+  const flutter = audio.createOscillator()
+  flutter.type = "triangle"
+  const flutterDepth = audio.createGain()
+  flutterDepth.gain.value = volume * 0.35
+  for (let jt = 0; jt < duration; jt += 0.15 + Math.random() * 0.15) {
+    flutter.frequency.setValueAtTime(7 + Math.random() * 6, start + jt)
+  }
+  flutter.connect(flutterDepth)
+  flutterDepth.connect(gain.gain)
 
   source.connect(bandpass)
   bandpass.connect(gain)
   gain.connect(audio.destination)
   source.start(start)
+  flutter.start(start)
+  flutter.stop(start + duration)
 }
