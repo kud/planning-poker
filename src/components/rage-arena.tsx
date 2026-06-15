@@ -884,7 +884,7 @@ export const RageArena = ({
             {litter.map((l) => (
               <motion.span
                 key={l.id}
-                className="pointer-events-none absolute z-[5] -translate-x-1/2 -translate-y-1/2 select-none text-xl"
+                className="pointer-events-none absolute z-[16] select-none text-2xl drop-shadow-[0_2px_3px_rgba(0,0,0,0.6)]"
                 style={{ left: `${l.x * 100}%`, top: `${l.y * 100}%` }}
                 initial={{
                   x: l.side === "left" ? -380 : 380,
@@ -899,7 +899,7 @@ export const RageArena = ({
                     0,
                   ],
                   y: [-30, -160, 0],
-                  opacity: [0, 1, 1, 0.8],
+                  opacity: [0, 1, 1],
                   rotate: l.side === "left" ? 540 : -540,
                 }}
                 transition={{ duration: 1.2, ease: "easeOut" }}
