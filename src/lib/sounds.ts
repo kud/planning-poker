@@ -253,6 +253,25 @@ export const playBell = () => {
   tone(880, 0.6, { type: "triangle", volume: 0.05, delay: 0.18 })
 }
 
+// Short, hype "fight!" sting when Rage Mode opens: ring bell, a gritty power
+// chord, a low thud, then a rising charge lead.
+export const playRageStart = () => {
+  playBell()
+  const root = 110 // A2 power chord (root + fifth + octave)
+  ;[root, root * 1.5, root * 2].forEach((f) =>
+    tone(f, 0.8, {
+      type: "sawtooth",
+      volume: 0.045,
+      delay: 0.05,
+      glideTo: f * 1.06,
+    }),
+  )
+  tone(70, 0.28, { type: "square", volume: 0.09, glideTo: 42 })
+  ;[330, 415, 494, 660].forEach((f, i) =>
+    tone(f, 0.13, { type: "square", volume: 0.04, delay: 0.5 + i * 0.09 }),
+  )
+}
+
 // Crowd cheer — wide-band noise with a quick swell and a long, ragged decay.
 export const playCheer = (volume = 0.05) => {
   const audio = audioContext()

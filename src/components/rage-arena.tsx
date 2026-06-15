@@ -8,7 +8,13 @@ import { avatarUrl } from "@/lib/avatar"
 import { cn } from "@/lib/utils"
 import { DealerSprite } from "@/components/pixel-dealer"
 import { RotateCcw } from "lucide-react"
-import { playPunch, playHit, playBell, playCheer } from "@/lib/sounds"
+import {
+  playPunch,
+  playHit,
+  playBell,
+  playCheer,
+  playRageStart,
+} from "@/lib/sounds"
 
 type Props = {
   myId: string
@@ -205,6 +211,7 @@ export const RageArena = ({
   const cleaningRef = useRef(false)
   const debrisRef = useRef(0)
   const killsRef = useRef<Map<string, number>>(new Map())
+  const winnerRef = useRef(false)
   const [leaderboard, setLeaderboard] = useState<
     { id: string; name: string; kills: number }[]
   >([])
@@ -224,6 +231,7 @@ export const RageArena = ({
     setChairHeldByMe(false)
     lastHitFrom.current.clear()
     killsRef.current.clear()
+    winnerRef.current = false
     setLeaderboard([])
     setPools([])
     setBloods([])
@@ -271,7 +279,7 @@ export const RageArena = ({
   }
 
   useEffect(() => {
-    playBell()
+    playRageStart()
     const t = setTimeout(() => setIntro(false), INTRO_MS)
     return () => clearTimeout(t)
   }, [])
@@ -294,16 +302,20 @@ export const RageArena = ({
   useEffect(() => {
     if (intro) return
     const iv = setInterval(() => {
-      if (cleaningRef.current || debrisRef.current < 6) return
+      if (cleaningRef.current || debrisRef.current < 10) return
       cleaningRef.current = true
       setCleaning(true)
+      // Floor wiped once he's swept the whole stage…
       setTimeout(() => {
         setLitter([])
         setPools([])
+      }, 9000)
+      // …then he walks out the top-right corner and we unmount him.
+      setTimeout(() => {
         setCleaning(false)
         cleaningRef.current = false
-      }, 4200)
-    }, 9000)
+      }, 11200)
+    }, 22000)
     return () => clearInterval(iv)
   }, [intro])
 
@@ -373,9 +385,9 @@ export const RageArena = ({
             side,
             x:
               side === "left"
-                ? 0.08 + Math.random() * 0.42
-                : 0.5 + Math.random() * 0.42,
-            y: 0.45 + Math.random() * 0.48,
+                ? 0.2 + Math.random() * 0.28
+                : 0.52 + Math.random() * 0.28,
+            y: 0.38 + Math.random() * 0.3,
           },
         ].slice(-24),
       )
@@ -420,7 +432,9 @@ export const RageArena = ({
 
   useEffect(() => {
     let raf = 0
-    const clamp = (n: number) => Math.max(0, Math.min(1, n))
+    // Keep fighters inset from the ring edge so the avatar is never clipped.
+    const EDGE = 0.06
+    const clamp = (n: number) => Math.max(EDGE, Math.min(1 - EDGE, n))
     const loop = () => {
       const m = me.current
       const now = Date.now()
@@ -520,8 +534,8 @@ export const RageArena = ({
       m.vy *= FRICTION
       m.x = clamp(m.x + m.vx)
       m.y = clamp(m.y + m.vy)
-      if (m.x === 0 || m.x === 1) m.vx *= -0.4
-      if (m.y === 0 || m.y === 1) m.vy *= -0.4
+      if (m.x <= EDGE || m.x >= 1 - EDGE) m.vx *= -0.4
+      if (m.y <= EDGE || m.y >= 1 - EDGE) m.vy *= -0.4
       const mePunching = m.hp > 0 && now < punchUntil.current
 
       // --- update bots (simple chase-and-punch AI) ---
@@ -570,13 +584,14 @@ export const RageArena = ({
             .map(([id, p]) => ({ id, x: p.x, y: p.y })),
         ]
 
-        // Punching near a loose chair grabs it — player only, so bots never
-        // snatch it before you can reach it.
+        // Punching near a free chair grabs it. Bots never chase it (their AI
+        // targets fighters, not the chair) but can grab it opportunistically.
         const ch = chair.current
         if (ch.heldBy === null) {
           for (const a of punchers) {
+            const local = a.id === myId || a.id.startsWith("bot-")
             if (
-              a.id === myId &&
+              local &&
               Math.hypot(ch.x - a.x, ch.y - a.y) < CHAIR_GRAB_RANGE
             ) {
               ch.heldBy = a.id
@@ -640,6 +655,29 @@ export const RageArena = ({
         }
       }
 
+      // --- last fighter standing wins ---
+      if (!intro) {
+        const fighters = [
+          { id: myId, name: "You", hp: m.hp },
+          ...bots.current.map((b) => ({ id: b.id, name: b.name, hp: b.hp })),
+        ]
+        const alive = fighters.filter((f) => f.hp > 0)
+        if (alive.length > 1) winnerRef.current = false
+        else if (
+          !winnerRef.current &&
+          fighters.length > 1 &&
+          alive.length === 1
+        ) {
+          winnerRef.current = true
+          setFlash(`🏆 ${alive[0].name} win${alive[0].id === myId ? "" : "s"}!`)
+          setQuip(
+            `And ${alive[0].name === "You" ? "you have" : alive[0].name + " has"} it — last one standing!`,
+          )
+          playBell()
+          playCheer(0.09)
+        }
+      }
+
       if (now - lastSent.current > 50) {
         lastSent.current = now
         onMove(m.x, m.y, mePunching, m.hp)
@@ -688,7 +726,7 @@ export const RageArena = ({
             fist.style.opacity =
               isPunching && !isDead && !holdsChair ? "1" : "0"
             fist.style.transform = isPunching
-              ? "translateX(10px)"
+              ? "translateX(-10px)"
               : "translateX(0)"
           }
         }
@@ -789,7 +827,7 @@ export const RageArena = ({
             if (el) fistRefs.current.set(id, el)
             else fistRefs.current.delete(id)
           }}
-          className="pointer-events-none absolute -right-3 top-1/2 -translate-y-1/2 text-lg opacity-0 transition-[opacity,transform] duration-75"
+          className="pointer-events-none absolute -left-3 top-1/2 -translate-y-1/2 text-lg opacity-0 transition-[opacity,transform] duration-75"
         >
           👊
         </span>
@@ -869,7 +907,7 @@ export const RageArena = ({
             ref={containerRef}
             onPointerDown={onPointer}
             onPointerMove={(e) => e.buttons === 1 && onPointer(e)}
-            className="relative h-full w-full touch-none overflow-hidden rounded-2xl border-4 border-red-500/30 bg-[repeating-linear-gradient(45deg,rgba(255,255,255,0.02)_0_14px,transparent_14px_28px)] shadow-[inset_0_0_90px_rgba(0,0,0,0.7)]"
+            className="relative h-full w-full touch-none rounded-2xl border-4 border-red-500/30 bg-[repeating-linear-gradient(45deg,rgba(255,255,255,0.02)_0_14px,transparent_14px_28px)] shadow-[inset_0_0_90px_rgba(0,0,0,0.7)]"
           >
             {/* Ropes */}
             <div className="pointer-events-none absolute inset-3 rounded-xl border-2 border-white/15" />
@@ -902,32 +940,23 @@ export const RageArena = ({
               </div>
             ))}
 
-            {/* Snacks tossed in from the tribunes — fly in, then stay on the floor */}
+            {/* Snacks lobbed in from the stands — a one-shot CSS arc that rests
+                in place (re-renders never restart it, so they stay put). */}
             {litter.map((l) => (
-              <motion.span
+              <span
                 key={l.id}
-                className="pointer-events-none absolute z-[16] select-none text-2xl drop-shadow-[0_2px_3px_rgba(0,0,0,0.6)]"
-                style={{ left: `${l.x * 100}%`, top: `${l.y * 100}%` }}
-                initial={{
-                  x: l.side === "left" ? -380 : 380,
-                  y: -30,
-                  opacity: 0,
-                  rotate: 0,
+                className={`pointer-events-none absolute z-[16] flex h-7 w-7 items-center justify-center select-none text-2xl leading-none drop-shadow-[0_2px_3px_rgba(0,0,0,0.6)] ${
+                  l.side === "left" ? "snack-toss-left" : "snack-toss-right"
+                }`}
+                style={{
+                  left: `${l.x * 100}%`,
+                  top: `${l.y * 100}%`,
+                  marginLeft: -14,
+                  marginTop: -14,
                 }}
-                animate={{
-                  x: [
-                    l.side === "left" ? -380 : 380,
-                    l.side === "left" ? -180 : 180,
-                    0,
-                  ],
-                  y: [-30, -160, 0],
-                  opacity: [0, 1, 1],
-                  rotate: l.side === "left" ? 540 : -540,
-                }}
-                transition={{ duration: 1.2, ease: "easeOut" }}
               >
                 {l.emoji}
-              </motion.span>
+              </span>
             ))}
 
             {/* Janitor sweeps the floor clean */}
@@ -935,22 +964,24 @@ export const RageArena = ({
               {cleaning && (
                 <motion.div
                   className="pointer-events-none absolute z-20"
-                  initial={{ left: "-14%", top: "82%", opacity: 1 }}
+                  initial={{ left: "-15%", top: "86%" }}
                   animate={{
-                    left: ["-14%", "108%", "108%", "-14%", "-14%", "108%"],
-                    top: ["82%", "82%", "52%", "52%", "22%", "22%"],
+                    // enter, sweep the whole stage staying on it, then walk
+                    // fully off the top-right corner (no fade — he leaves)
+                    left: ["-15%", "90%", "90%", "8%", "8%", "90%", "140%"],
+                    top: ["86%", "86%", "58%", "58%", "30%", "30%", "-30%"],
                   }}
-                  exit={{ opacity: 0 }}
                   transition={{
-                    duration: 4,
+                    duration: 11,
                     ease: "linear",
-                    times: [0, 0.32, 0.4, 0.72, 0.8, 1],
+                    times: [0, 0.22, 0.3, 0.52, 0.6, 0.82, 1],
                   }}
                 >
                   <motion.div
-                    animate={{ y: [0, -1, 0] }}
+                    style={{ transformOrigin: "bottom center" }}
+                    animate={{ y: [0, -1, 0], rotate: [-9, 9, -9] }}
                     transition={{
-                      duration: 0.32,
+                      duration: 0.7,
                       repeat: Infinity,
                       ease: "easeInOut",
                     }}
@@ -1094,20 +1125,26 @@ export const RageArena = ({
         >
           👊 Punch
         </button>
-        <button
-          onClick={addBot}
-          className="rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm text-white hover:bg-white/20"
-        >
-          🤖 Add bot
-        </button>
-        {botList.length > 0 && (
+        <span className="flex items-center gap-1 rounded-full border border-white/20 bg-white/10 px-1.5 py-1 text-sm text-white">
           <button
             onClick={removeBot}
-            className="rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm text-white hover:bg-white/20"
+            disabled={botList.length === 0}
+            aria-label="Remove a bot"
+            className="flex h-7 w-7 items-center justify-center rounded-full text-base hover:bg-white/15 disabled:opacity-30"
           >
-            ➖ Remove bot
+            −
           </button>
-        )}
+          <span className="min-w-16 text-center tabular-nums">
+            🤖 {botList.length} bot{botList.length === 1 ? "" : "s"}
+          </span>
+          <button
+            onClick={addBot}
+            aria-label="Add a bot"
+            className="flex h-7 w-7 items-center justify-center rounded-full text-base hover:bg-white/15"
+          >
+            +
+          </button>
+        </span>
         {isHost && (
           <button
             onClick={onRequestRestart}
