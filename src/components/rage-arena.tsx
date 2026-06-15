@@ -286,9 +286,10 @@ export const RageArena = ({
       // --- update me ---
       if (!intro && m.hp > 0) {
         const k = keys.current
-        const left = k.has("arrowleft") || k.has("a")
+        // WASD (QWERTY) + ZQSD (AZERTY) + arrows
+        const left = k.has("arrowleft") || k.has("a") || k.has("q")
         const right = k.has("arrowright") || k.has("d")
-        const upK = k.has("arrowup") || k.has("w")
+        const upK = k.has("arrowup") || k.has("w") || k.has("z")
         const downK = k.has("arrowdown") || k.has("s")
         if (left || right || upK || downK) {
           m.vx += (Number(right) - Number(left)) * ACCEL
@@ -755,8 +756,8 @@ export const RageArena = ({
           </span>
         ) : (
           <span className="hidden sm:inline">
-            WASD / arrows to move · Space to punch · drag on touch · punch the
-            🪑 to grab it
+            WASD / ZQSD / arrows to move · Space to punch · drag on touch ·
+            punch the 🪑 to grab it
           </span>
         )}
         <button
