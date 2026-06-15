@@ -373,13 +373,13 @@ export const RageArena = ({
             .map(([id, p]) => ({ id, x: p.x, y: p.y })),
         ]
 
-        // Punching near a loose chair grabs it (locally controllable actors only)
+        // Punching near a loose chair grabs it — player only, so bots never
+        // snatch it before you can reach it.
         const ch = chair.current
         if (ch.heldBy === null) {
           for (const a of punchers) {
-            const local = a.id === myId || a.id.startsWith("bot-")
             if (
-              local &&
+              a.id === myId &&
               Math.hypot(ch.x - a.x, ch.y - a.y) < CHAIR_GRAB_RANGE
             ) {
               ch.heldBy = a.id
