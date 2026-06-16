@@ -7,7 +7,6 @@ import { cn } from "@/lib/utils"
 const QUICK_EMOJIS = ["👍", "😂", "😮", "🤯"]
 
 const MORE_EMOJIS = [
-  "🖕",
   "❤️",
   "🎉",
   "👏",
@@ -48,6 +47,7 @@ const MORE_EMOJIS = [
   "🃏",
   "🐈",
   "💸",
+  "🖕",
 ]
 
 type Props = {
@@ -77,7 +77,7 @@ export const ReactionBar = ({ onReact, theme }: Props) => {
   const fire = (emoji: string) => onReact(emoji)
 
   return (
-    <div ref={ref} className="absolute right-2 sm:right-4 top-2 z-20">
+    <div ref={ref} className="relative">
       <AnimatePresence>
         {open && (
           <motion.div

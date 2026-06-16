@@ -46,6 +46,81 @@ const SMALL_TALK: Announcement[] = [
     title: "At your service",
     sub: "Cards shuffled, table clean, opinions ready.",
   },
+  {
+    emoji: "⏳",
+    title: "An observation",
+    sub: "The story said 'quick fix'. The story always says that.",
+  },
+  {
+    emoji: "🧠",
+    title: "Wisdom",
+    sub: "If two engineers agree instantly, one of them didn't read the ticket.",
+  },
+  {
+    emoji: "🍝",
+    title: "Tonight's special",
+    sub: "Spaghetti. It's always spaghetti under there.",
+  },
+  {
+    emoji: "📞",
+    title: "Reminder",
+    sub: "'It works on my machine' is not a valid estimate.",
+  },
+  {
+    emoji: "🔮",
+    title: "I foresee",
+    sub: "This 3-pointer becoming an 8 by Thursday.",
+  },
+  {
+    emoji: "🫠",
+    title: "Gentle truth",
+    sub: "The definition of done was a group hallucination.",
+  },
+  {
+    emoji: "🦗",
+    title: "...",
+    sub: "That's the sound of the silence after 'any questions?'",
+  },
+  {
+    emoji: "💼",
+    title: "Career advice",
+    sub: "Estimate in the morning. Regret in the afternoon.",
+  },
+  {
+    emoji: "🪤",
+    title: "Careful",
+    sub: "'While we're in there...' has ended more sprints than any bug.",
+  },
+  {
+    emoji: "🧾",
+    title: "The fine print",
+    sub: "Story points are imaginary. The deadline is not.",
+  },
+  {
+    emoji: "🛟",
+    title: "House policy",
+    sub: "We don't say 'just'. 'Just' is how the 1 becomes a 5.",
+  },
+  {
+    emoji: "🐘",
+    title: "Re: the room",
+    sub: "Yes, everyone's also thinking about the legacy migration.",
+  },
+  {
+    emoji: "☕",
+    title: "Barista's note",
+    sub: "Decaf at standup. We've all seen what the other kind does.",
+  },
+  {
+    emoji: "🎰",
+    title: "Odds update",
+    sub: "House says someone re-opens this ticket within a fortnight.",
+  },
+  {
+    emoji: "🧶",
+    title: "Untangling",
+    sub: "'It's just a config change' — famous last words, framed on my wall.",
+  },
 ]
 
 const PIXEL = 6

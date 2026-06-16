@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import Link from "next/link"
 import {
   motion,
@@ -8,7 +8,7 @@ import {
   useReducedMotion,
   MotionConfig,
 } from "framer-motion"
-import { Monitor, Moon, Sun } from "lucide-react"
+import { Monitor, Moon, Sun, Volume2, VolumeX } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { SeatAvatar } from "@/components/seat-avatar"
@@ -28,6 +28,7 @@ import { OnboardingHints } from "@/components/onboarding-hints"
 import { PixelPet } from "@/components/pixel-pet"
 import { PixelDealer } from "@/components/pixel-dealer"
 import { PixelWaiter } from "@/components/pixel-waiter"
+import { PixelPlant } from "@/components/pixel-plant"
 import { ReactionBar } from "@/components/reaction-bar"
 import { FloatingReactions } from "@/components/floating-reactions"
 import { PresenceToasts } from "@/components/presence-toasts"
@@ -99,6 +100,8 @@ type Props = {
 
 export type Announcement = { emoji: string; title: string; sub: string }
 
+const pick = <T,>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)]
+
 const revealQuip = (votes: string[]): Announcement => {
   const numbers = votes.map(Number).filter((n) => !Number.isNaN(n))
   const distinct = new Set(votes)
@@ -108,11 +111,23 @@ const revealQuip = (votes: string[]): Announcement => {
     distinct.size === 1 &&
     !["?", "☕"].includes(votes[0])
   )
-    return {
-      emoji: "🏆",
-      title: "Unanimous!",
-      sub: "Perfect consensus — ship it 🚀",
-    }
+    return pick<Announcement>([
+      {
+        emoji: "🏆",
+        title: "Unanimous!",
+        sub: "Perfect consensus — ship it 🚀",
+      },
+      {
+        emoji: "🎉",
+        title: "Everyone agrees",
+        sub: "Either it's that clear, or nobody read it.",
+      },
+      {
+        emoji: "🪄",
+        title: "Flawless harmony",
+        sub: "Frame this moment. It won't happen next round.",
+      },
+    ])
   if (votes.includes("☕"))
     return {
       emoji: "☕",
@@ -169,7 +184,62 @@ const revealQuip = (votes: string[]): Announcement => {
       title: "Mystery at the table",
       sub: "Someone needs more details",
     }
-  return { emoji: "🃏", title: "The table has spoken", sub: "Solid round" }
+  return pick<Announcement>([
+    { emoji: "🃏", title: "The table has spoken", sub: "Solid round." },
+    {
+      emoji: "🤝",
+      title: "Close enough for jazz",
+      sub: "Lock it in before someone changes their mind.",
+    },
+    {
+      emoji: "📊",
+      title: "I've seen worse",
+      sub: "I've also seen better. But mostly worse.",
+    },
+    {
+      emoji: "🫡",
+      title: "Numbers are in",
+      sub: "The product owner will pretend to be surprised.",
+    },
+    {
+      emoji: "🎯",
+      title: "Decisive bunch",
+      sub: "Now the hard part — actually building it.",
+    },
+  ])
+}
+
+// The dealer reacts when someone fires a charged emoji — love or the bird.
+const reactionComment = (name: string, emoji: string): Announcement | null => {
+  if (emoji === "❤️")
+    return {
+      emoji: "❤️",
+      title: pick([
+        `${name} is feeling the love`,
+        `${name} sends their heart`,
+        `Aww — ${name} loves this room`,
+      ]),
+      sub: pick([
+        "Group hug at the table?",
+        "Wholesome estimating 💕",
+        "Spread it around",
+      ]),
+    }
+  if (emoji === "🖕")
+    return {
+      emoji: "😬",
+      title: pick([
+        `${name}… charming`,
+        `Easy there, ${name}`,
+        `${name} is NOT happy with this story`,
+      ]),
+      sub: pick([
+        "Rough sprint, huh?",
+        "Take it to the arena, champ",
+        "Noted. Noted with concern",
+      ]),
+    }
+  return null
 }
 
 const THEME_STYLES = {
@@ -428,6 +498,15 @@ export const RoomView = ({
   const [muted, setMutedState] = useState(false)
   const [coffeeRun, setCoffeeRun] = useState(false)
 
+  // Single owned dismiss timer: any new announcement supersedes the previous
+  // one's close, so an unrelated re-render can never strand the bubble open.
+  const announceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const announce = useCallback((a: Announcement) => {
+    setAnnouncement(a)
+    if (announceTimer.current) clearTimeout(announceTimer.current)
+    announceTimer.current = setTimeout(() => setAnnouncement(null), 3000)
+  }, [])
+
   useEffect(() => {
     setMutedState(isMuted())
     playEnterRoom()
@@ -455,7 +534,7 @@ export const RoomView = ({
     // Coffee card revealed → the waiter wanders in (visible here, unlike during
     // an active break where the full-screen overlay would hide him).
     if (state.revealed && latestVotes.current.includes("☕")) setCoffeeRun(true)
-    setAnnouncement(
+    announce(
       state.revealed
         ? revealQuip(latestVotes.current)
         : {
@@ -464,9 +543,19 @@ export const RoomView = ({
             sub: "Place your votes, everyone",
           },
     )
-    const timer = setTimeout(() => setAnnouncement(null), 3000)
-    return () => clearTimeout(timer)
-  }, [state.revealed])
+  }, [state.revealed, announce])
+
+  // The dealer pipes up when a charged reaction (love / the bird) lands.
+  const lastReactedId = useRef(0)
+  useEffect(() => {
+    if (!reactions || reactions.length === 0) return
+    const latest = reactions[reactions.length - 1]
+    if (latest.id <= lastReactedId.current) return
+    lastReactedId.current = latest.id
+    const comment = reactionComment(latest.name, latest.emoji)
+    if (!comment) return
+    announce(comment)
+  }, [reactions, announce])
 
   useEffect(() => {
     if (!state.speaker) return
@@ -662,10 +751,14 @@ export const RoomView = ({
               variant="ghost"
               size="sm"
               onClick={toggleMuted}
-              className={`border text-sm ${s.themeBtn}`}
+              className={`h-7 w-7 border p-0 ${s.themeBtn}`}
               aria-label={muted ? "Unmute sounds" : "Mute sounds"}
             >
-              {muted ? "🔇" : "🔊"}
+              {muted ? (
+                <VolumeX className="h-4 w-4" />
+              ) : (
+                <Volume2 className="h-4 w-4" />
+              )}
             </Button>
             <Button
               variant="ghost"
@@ -673,7 +766,7 @@ export const RoomView = ({
               onClick={cycleTheme}
               title={`Theme: ${themePref} (click to change)`}
               aria-label={`Theme: ${themePref}`}
-              className={`border text-sm ${s.themeBtn}`}
+              className={`h-7 w-7 border p-0 ${s.themeBtn}`}
             >
               {themePref === "system" ? (
                 <Monitor className="h-4 w-4" />
@@ -824,6 +917,11 @@ export const RoomView = ({
         <main className="flex-1 relative flex items-center justify-center overflow-hidden">
           <PixelPet />
           <PixelWaiter active={coffeeRun} onDone={() => setCoffeeRun(false)} />
+          <PixelPlant className="bottom-4 left-4 hidden opacity-90 md:block" />
+          <PixelPlant
+            className="bottom-4 right-4 hidden opacity-90 md:block"
+            delay={1.3}
+          />
           {/* Mobile — roster grid, no table */}
           <div className="md:hidden w-full max-h-full overflow-y-auto px-4 py-5 flex flex-col items-center gap-6">
             <div
@@ -1001,17 +1099,26 @@ export const RoomView = ({
             s.hand,
           )}
         >
-          {onReact && <ReactionBar onReact={onReact} theme={theme} />}
-          {onRequestBreak && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onRequestBreak}
-              title="Ask the room for a coffee break"
-              className={`absolute left-2 top-2 z-20 border text-xs sm:left-4 ${s.themeBtn}`}
-            >
-              ☕ Break
-            </Button>
+          {(onReact || onRequestBreak) && (
+            <div className="absolute right-2 top-2 z-20 flex items-center gap-2 sm:right-4">
+              {onRequestBreak && (
+                <button
+                  onClick={onRequestBreak}
+                  title="Ask the room for a coffee break"
+                  className={cn(
+                    "flex items-center rounded-full border px-4 py-1 text-sm font-medium shadow-lg backdrop-blur-md transition-colors",
+                    theme === "dark"
+                      ? "border-white/10 bg-[#171a2c]/95 text-white hover:bg-[#1d2138]"
+                      : "border-slate-200 bg-white/95 text-slate-700 hover:bg-slate-50",
+                  )}
+                >
+                  <span className="flex h-8 items-center gap-1.5">
+                    ☕ Break
+                  </span>
+                </button>
+              )}
+              {onReact && <ReactionBar onReact={onReact} theme={theme} />}
+            </div>
           )}
           <div
             data-tour="hand"
