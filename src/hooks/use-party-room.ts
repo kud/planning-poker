@@ -3,6 +3,7 @@
 import { useRef, useState } from "react"
 import usePartySocket from "partysocket/react"
 import { CardValue, Deck, Message, RoomState } from "@/lib/types"
+import { freshStats } from "@/lib/session-stats"
 
 export type ConnectionStatus = "connecting" | "connected" | "reconnecting"
 
@@ -21,6 +22,8 @@ const normalizeState = (s: Partial<RoomState>): RoomState => ({
   break: s.break ?? null,
   requireApproval: s.requireApproval ?? false,
   pending: s.pending ?? {},
+  timer: s.timer ?? null,
+  sessionStats: s.sessionStats ?? freshStats(),
 })
 
 export type RagePlayer = {
@@ -187,6 +190,10 @@ export const usePartyRoom = ({
     clearHistory: () => send({ type: "clear-history" }),
     setAutoReveal: (enabled: boolean) =>
       send({ type: "set-auto-reveal", enabled }),
+    setSpectator: (enabled: boolean) =>
+      send({ type: "set-spectator", enabled }),
+    startTimer: (seconds: number) => send({ type: "start-timer", seconds }),
+    clearTimer: () => send({ type: "clear-timer" }),
     requestBreak: () => send({ type: "request-break" }),
     voteBreak: (accept: boolean) => send({ type: "break-vote", accept }),
     setBreakTime: (seconds: number) =>

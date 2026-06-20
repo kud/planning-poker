@@ -18,6 +18,7 @@ import { DeckSelector } from "@/components/deck-selector"
 import { VoteSummary } from "@/components/vote-summary"
 import { TopicBar } from "@/components/topic-bar"
 import { SessionHistory } from "@/components/session-history"
+import { SessionRecap } from "@/components/session-recap"
 import { HostActions } from "@/components/host-actions"
 import { RageArena } from "@/components/rage-arena"
 import { BreakOverlay } from "@/components/break-overlay"
@@ -79,6 +80,9 @@ type Props = {
   ) => void
   onClearHistory?: () => void
   onSetAutoReveal?: (enabled: boolean) => void
+  onSetSpectator?: (enabled: boolean) => void
+  onStartTimer?: (seconds: number) => void
+  onClearTimer?: () => void
   onSetRage?: (enabled: boolean) => void
   onRageMove?: (x: number, y: number, punching: boolean, hp: number) => void
   onInviteRage?: () => void
@@ -387,7 +391,7 @@ const RoundControls = ({
   roomId?: string
 }) => {
   const pending = Object.values(state.participants).filter(
-    (p) => p.vote === null,
+    (p) => p.vote === null && !p.isSpectator,
   )
   const status =
     total <= 1
@@ -443,6 +447,50 @@ const RoundControls = ({
   )
 }
 
+// Shared round countdown — every client ticks off the same server `endsAt`.
+const CountdownPill = ({ endsAt }: { endsAt: number }) => {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 250)
+    return () => clearInterval(t)
+  }, [])
+  const remaining = Math.max(0, endsAt - now)
+  const secs = Math.ceil(remaining / 1000)
+  const mm = Math.floor(secs / 60)
+  const ss = secs % 60
+  const done = remaining <= 0
+  const urgent = !done && remaining <= 10_000
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -10, scale: 0.9 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: -10, scale: 0.9 }}
+      transition={{ type: "spring", stiffness: 320, damping: 24 }}
+      className={cn(
+        "flex items-center gap-2 rounded-full border px-4 py-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.4)] backdrop-blur-md",
+        done
+          ? "border-red-400/60 bg-red-500/20 text-red-100"
+          : urgent
+            ? "border-red-400/50 bg-[#1a0d12]/90 text-red-200"
+            : "border-amber-400/40 bg-[#10131f]/90 text-amber-100",
+      )}
+    >
+      <motion.span
+        className="text-lg"
+        animate={urgent ? { scale: [1, 1.2, 1] } : { scale: 1 }}
+        transition={
+          urgent ? { duration: 1, repeat: Infinity } : { duration: 0 }
+        }
+      >
+        {done ? "⏰" : "⏱"}
+      </motion.span>
+      <span className="text-sm font-semibold tabular-nums tracking-wide">
+        {done ? "Time's up!" : `${mm}:${ss.toString().padStart(2, "0")}`}
+      </span>
+    </motion.div>
+  )
+}
+
 export const RoomView = ({
   state,
   myId,
@@ -463,6 +511,9 @@ export const RoomView = ({
   onEditHistory,
   onClearHistory,
   onSetAutoReveal,
+  onSetSpectator,
+  onStartTimer,
+  onClearTimer,
   onSetRage,
   onRageMove,
   onInviteRage,
@@ -557,6 +608,24 @@ export const RoomView = ({
     announce(comment)
   }, [reactions, announce])
 
+  // Dealer calls out a consensus streak as it climbs (overrides the generic
+  // reveal quip, since back-to-back agreement is the more exciting beat).
+  const prevStreak = useRef(0)
+  const streak = state.sessionStats.currentStreak
+  useEffect(() => {
+    if (streak >= 2 && streak > prevStreak.current)
+      announce({
+        emoji: "🔥",
+        title: `${streak} in a row!`,
+        sub: pick([
+          "This table is locked in",
+          "Someone cancel the meeting — they agree",
+          "Consensus on tap tonight",
+        ]),
+      })
+    prevStreak.current = streak
+  }, [streak, announce])
+
   useEffect(() => {
     if (!state.speaker) return
     playDice()
@@ -614,6 +683,7 @@ export const RoomView = ({
       const target = e.target as HTMLElement
       if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") return
       const key = e.key.toLowerCase()
+      if (state.participants[myId]?.isSpectator) return
       if (!state.revealed && /^[0-9]$/.test(key)) {
         const index = key === "0" ? 9 : Number(key) - 1
         const card = state.deck.cards[index]
@@ -644,18 +714,20 @@ export const RoomView = ({
   const participants = Object.values(state.participants)
   const others = participants.filter((p) => p.id !== myId)
   const seated = me ? [me, ...others] : others
-  const allVoted = participants.every((p) => p.vote !== null)
-  const voteCount = participants.filter((p) => p.vote !== null).length
+  const voters = participants.filter((p) => !p.isSpectator)
+  const allVoted = voters.length > 0 && voters.every((p) => p.vote !== null)
+  const voteCount = voters.filter((p) => p.vote !== null).length
+  const amSpectator = !!me?.isSpectator
   const s = THEME_STYLES[theme]
 
   useEffect(() => {
     document.title = state.revealed
       ? "Revealed · Planning Poker"
-      : `${voteCount}/${participants.length} voted · Planning Poker`
+      : `${voteCount}/${voters.length} voted · Planning Poker`
     return () => {
       document.title = "Planning Poker"
     }
-  }, [state.revealed, voteCount, participants.length])
+  }, [state.revealed, voteCount, voters.length])
 
   const reduceMotion = useReducedMotion()
   const votes = participants
@@ -698,6 +770,36 @@ export const RoomView = ({
     if (state.break?.status === "active") setCoffeeRun(true)
   }, [state.break?.status])
 
+  // Dealer heckles the table the moment the round timer runs out.
+  const timerEndsAt = state.timer?.endsAt
+  useEffect(() => {
+    if (!timerEndsAt) return
+    const ms = timerEndsAt - Date.now()
+    if (ms <= 0) return
+    const t = setTimeout(() => {
+      announce(
+        pick<Announcement>([
+          {
+            emoji: "⏰",
+            title: "Time's up!",
+            sub: "Lock in your votes, folks",
+          },
+          {
+            emoji: "⌛",
+            title: "Pencils down!",
+            sub: "The clock beat you to it",
+          },
+          {
+            emoji: "🔔",
+            title: "Ding ding ding!",
+            sub: "Final answers on the table",
+          },
+        ]),
+      )
+    }, ms)
+    return () => clearTimeout(t)
+  }, [timerEndsAt, announce])
+
   return (
     <MotionConfig reducedMotion="user">
       <div
@@ -730,7 +832,7 @@ export const RoomView = ({
                 ? "Revealed"
                 : allVoted
                   ? "All voted ✓"
-                  : `${voteCount} / ${participants.length} voted`}
+                  : `${voteCount} / ${voters.length} voted`}
             </span>
             {isHost && (
               <span
@@ -787,6 +889,11 @@ export const RoomView = ({
                 triggerClassName={`border text-xs ${s.themeBtn}`}
               />
             )}
+            <SessionRecap
+              stats={state.sessionStats}
+              theme={theme}
+              triggerClassName={`border text-xs ${s.themeBtn}`}
+            />
             {isHost && onSetApproval && (
               <Button
                 variant="ghost"
@@ -836,6 +943,26 @@ export const RoomView = ({
                 className="border border-red-400/50 bg-red-500/20 text-xs font-semibold text-red-100 hover:bg-red-500/30 hover:text-white dark:hover:bg-red-500/30"
               >
                 👊 Brawl
+              </Button>
+            )}
+            {onSetSpectator && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onSetSpectator(!amSpectator)}
+                title={
+                  amSpectator
+                    ? "You're watching — click to pick up cards and vote"
+                    : "Sit out the voting and just watch (handy for facilitators)"
+                }
+                className={cn(
+                  "border text-xs",
+                  amSpectator
+                    ? "border-sky-400/50 bg-sky-500/15 text-sky-300 hover:bg-sky-500/25 hover:text-sky-200 dark:hover:bg-sky-500/25"
+                    : s.themeBtn,
+                )}
+              >
+                {amSpectator ? "👀 Watching" : "🃏 Voting"}
               </Button>
             )}
             {onUpdateProfile && (
@@ -890,15 +1017,18 @@ export const RoomView = ({
             autoReveal={state.autoReveal}
             deck={state.deck}
             spokenCount={state.spoken.length}
-            participantCount={participants.length}
+            participantCount={voters.length}
             voteCount={voteCount}
             suggestedEstimate={suggestedEstimate}
             headerClass={s.header}
+            timerActive={!!state.timer}
             onReveal={onReveal}
             onReset={onReset}
             onRollSpeaker={onRollSpeaker}
             onSaveRound={onSaveRound}
             onSetAutoReveal={onSetAutoReveal}
+            onStartTimer={onStartTimer}
+            onClearTimer={onClearTimer}
           />
         )}
 
@@ -915,6 +1045,13 @@ export const RoomView = ({
 
         {/* Table area */}
         <main className="flex-1 relative flex items-center justify-center overflow-hidden">
+          <AnimatePresence>
+            {state.timer && !state.revealed && (
+              <div className="pointer-events-none absolute inset-x-0 top-4 z-30 flex justify-center">
+                <CountdownPill endsAt={state.timer.endsAt} />
+              </div>
+            )}
+          </AnimatePresence>
           <PixelPet />
           <PixelWaiter active={coffeeRun} onDone={() => setCoffeeRun(false)} />
           <PixelPlant className="bottom-4 left-4 hidden opacity-90 md:block" />
@@ -959,6 +1096,10 @@ export const RoomView = ({
                         index={i}
                         dealFrom={{ x: 0, y: -16 }}
                       />
+                    ) : participant.isSpectator ? (
+                      <span className="flex h-14 items-center text-[10px] uppercase tracking-wide text-slate-500">
+                        watching
+                      </span>
                     ) : (
                       <div
                         className={cn(
@@ -981,7 +1122,7 @@ export const RoomView = ({
                 state={state}
                 voteCount={voteCount}
                 allVoted={allVoted}
-                total={participants.length}
+                total={voters.length}
                 roomId={roomId}
               />
             </div>
@@ -1035,7 +1176,7 @@ export const RoomView = ({
                 state={state}
                 voteCount={voteCount}
                 allVoted={allVoted}
-                total={participants.length}
+                total={voters.length}
                 roomId={roomId}
               />
             </div>
@@ -1120,62 +1261,82 @@ export const RoomView = ({
               {onReact && <ReactionBar onReact={onReact} theme={theme} />}
             </div>
           )}
-          <div
-            data-tour="hand"
-            className="flex flex-col items-center gap-3 sm:gap-5"
-          >
-            <div className="flex items-baseline gap-3">
-              <p
-                className={`text-[10px] sm:text-xs font-medium tracking-wide uppercase ${s.handLabel}`}
-              >
-                {state.revealed ? "Waiting for next round…" : "Your hand"}
+          {amSpectator ? (
+            <div className="flex flex-col items-center gap-2 py-3 text-center">
+              <p className={`text-sm font-medium ${s.handLabel}`}>
+                👀 You&apos;re watching this session
               </p>
-              <p
-                className={`hidden sm:block text-[10px] font-mono opacity-60 ${s.handLabel}`}
-              >
-                {isHost
-                  ? state.revealed
-                    ? "space — next speaker, then new round"
-                    : "1–9 vote · space reveal"
-                  : state.revealed
-                    ? ""
-                    : "press 1–9 to vote"}
-              </p>
+              {onSetSpectator && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => onSetSpectator(false)}
+                  className={`border text-xs ${s.themeBtn}`}
+                >
+                  🃏 Pick up cards &amp; vote
+                </Button>
+              )}
             </div>
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={state.deck.preset}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -8 }}
-                transition={{ duration: 0.18 }}
-                className="flex flex-wrap justify-center sm:flex-nowrap sm:overflow-x-auto gap-2 sm:gap-3 max-w-full px-2 pt-3 sm:pt-4 pb-1"
-              >
-                {state.deck.cards.map((card, i) => (
-                  <motion.div
-                    key={card.value}
-                    className="flex-none"
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{
-                      delay: i * 0.04,
-                      type: "spring",
-                      stiffness: 300,
-                      damping: 22,
-                    }}
-                  >
-                    <PlayingCard
-                      card={card}
-                      selected={me?.vote === card.value}
-                      disabled={state.revealed}
-                      onSelect={handleVote}
-                      hotkey={i < 9 ? String(i + 1) : i === 9 ? "0" : undefined}
-                    />
-                  </motion.div>
-                ))}
-              </motion.div>
-            </AnimatePresence>
-          </div>
+          ) : (
+            <div
+              data-tour="hand"
+              className="flex flex-col items-center gap-3 sm:gap-5"
+            >
+              <div className="flex items-baseline gap-3">
+                <p
+                  className={`text-[10px] sm:text-xs font-medium tracking-wide uppercase ${s.handLabel}`}
+                >
+                  {state.revealed ? "Waiting for next round…" : "Your hand"}
+                </p>
+                <p
+                  className={`hidden sm:block text-[10px] font-mono opacity-60 ${s.handLabel}`}
+                >
+                  {isHost
+                    ? state.revealed
+                      ? "space — next speaker, then new round"
+                      : "1–9 vote · space reveal"
+                    : state.revealed
+                      ? ""
+                      : "press 1–9 to vote"}
+                </p>
+              </div>
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={state.deck.preset}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.18 }}
+                  className="flex flex-wrap justify-center sm:flex-nowrap sm:overflow-x-auto gap-2 sm:gap-3 max-w-full px-2 pt-3 sm:pt-4 pb-1"
+                >
+                  {state.deck.cards.map((card, i) => (
+                    <motion.div
+                      key={card.value}
+                      className="flex-none"
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{
+                        delay: i * 0.04,
+                        type: "spring",
+                        stiffness: 300,
+                        damping: 22,
+                      }}
+                    >
+                      <PlayingCard
+                        card={card}
+                        selected={me?.vote === card.value}
+                        disabled={state.revealed}
+                        onSelect={handleVote}
+                        hotkey={
+                          i < 9 ? String(i + 1) : i === 9 ? "0" : undefined
+                        }
+                      />
+                    </motion.div>
+                  ))}
+                </motion.div>
+              </AnimatePresence>
+            </div>
+          )}
         </div>
 
         <OnboardingHints isHost={isHost} />

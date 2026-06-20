@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import {
   Dialog,
   DialogContent,
@@ -32,8 +32,11 @@ export const SettingsDialog = ({
   const [avatar, setAvatar] = useState(currentAvatar)
   const [avatarOptions, setAvatarOptions] = useState<string[]>([])
 
-  useEffect(() => {
-    if (!open) return
+  // Seed the form from the latest profile each time the dialog opens — done at
+  // the open event rather than in an effect to avoid a render→setState cascade.
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next)
+    if (!next) return
     setName(currentName)
     setAvatar(currentAvatar)
     const opts = Array.from({ length: 8 }, randomSeed)
@@ -41,7 +44,7 @@ export const SettingsDialog = ({
       ? opts
       : [currentAvatar, ...opts.slice(1)]
     setAvatarOptions(withCurrent)
-  }, [open, currentName, currentAvatar])
+  }
 
   const shuffle = () => {
     const opts = Array.from({ length: 8 }, randomSeed)
@@ -58,7 +61,7 @@ export const SettingsDialog = ({
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger render={trigger} />
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>

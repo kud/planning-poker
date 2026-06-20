@@ -55,6 +55,7 @@ export const SeatAvatar = ({
               "shadow-[0_0_14px_rgba(99,102,241,0.65)] ring-2 ring-indigo-400/60",
             isSpeaker &&
               "shadow-[0_0_18px_rgba(251,191,36,0.75)] ring-2 ring-amber-400",
+            participant.isSpectator && "opacity-60 grayscale",
           )}
         />
         {participant.isHost && (
@@ -84,6 +85,14 @@ export const SeatAvatar = ({
         {!isSpeaker && hasSpoken && (
           <span className="absolute -bottom-1 -right-1 text-[10px] rounded-full bg-emerald-500/90 text-white w-4 h-4 flex items-center justify-center">
             ✓
+          </span>
+        )}
+        {participant.isSpectator && (
+          <span
+            className="absolute -bottom-1.5 -right-1.5 text-[10px]"
+            title="Watching"
+          >
+            👀
           </span>
         )}
       </motion.div>
