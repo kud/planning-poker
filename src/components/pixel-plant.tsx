@@ -1,8 +1,10 @@
 "use client"
 
-import { motion } from "framer-motion"
+import { useRef, useState } from "react"
+import { motion, AnimatePresence } from "framer-motion"
 
 const PIXEL = 5
+const BIRD_PIXEL = 4
 
 // Palette — layered greens + terracotta, with a near-black outline that gives
 // the sprite its crisp pixel-art identity (see the reference set).
@@ -124,29 +126,122 @@ const toRects = (grid: (string | null)[][]) => {
 
 const RECTS = toRects(withOutline(buildGrid()))
 
-export const PixelPlant = ({
-  className = "",
-  delay = 0,
-}: {
-  className?: string
-  delay?: number
-}) => (
+// A tiny pixel bird that lives in the foliage until the plant is poked. Drawn
+// the same way as the plant — char rows run-length encoded into rects.
+const BIRD_PALETTE: Record<string, string> = {
+  o: "#1b1714", // outline
+  B: "#4dabf7", // body
+  w: "#1c7ed6", // folded wing
+  e: "#ffffff", // eye
+  k: "#f59f00", // beak
+}
+
+const BIRD_ROWS = [
+  "...ooo....",
+  "..oBBBo...",
+  ".oBBBBBo..",
+  "oBBBwwBBek",
+  "oBBBwwBBo.",
+  ".oBBBBBo..",
+  "..ooooo...",
+  "...o.o....",
+]
+
+const BIRD_W = BIRD_ROWS[0].length
+const BIRD_H = BIRD_ROWS.length
+
+const birdRects = () => {
+  const rects: Array<[number, number, number, string]> = []
+  BIRD_ROWS.forEach((row, y) => {
+    let x = 0
+    while (x < row.length) {
+      const ch = row[x]
+      if (ch === ".") {
+        x++
+        continue
+      }
+      let w = 1
+      while (x + w < row.length && row[x + w] === ch) w++
+      rects.push([x, y, w, BIRD_PALETTE[ch]])
+      x += w
+    }
+  })
+  return rects
+}
+
+const BIRD_RECTS = birdRects()
+
+const PixelBird = ({ onDone }: { onDone: () => void }) => (
   <motion.div
-    className={`pointer-events-none absolute ${className}`}
-    animate={{ rotate: [-1.5, 1.5, -1.5] }}
-    transition={{ duration: 4, repeat: Infinity, ease: "easeInOut", delay }}
-    style={{ transformOrigin: "bottom center" }}
-    aria-hidden
+    className="pointer-events-none absolute left-1/3 top-0"
+    initial={{ x: 0, y: 0, opacity: 0, scale: 0.5 }}
+    animate={{ x: 26, y: -112, opacity: [0, 1, 1, 0], scale: 1, rotate: -14 }}
+    transition={{
+      duration: 1.2,
+      ease: "easeOut",
+      opacity: { duration: 1.2, times: [0, 0.15, 0.7, 1] },
+    }}
+    onAnimationComplete={onDone}
   >
-    <svg
-      width={W * PIXEL}
-      height={H * PIXEL}
-      viewBox={`0 0 ${W} ${H}`}
+    <motion.svg
+      width={BIRD_W * BIRD_PIXEL}
+      height={BIRD_H * BIRD_PIXEL}
+      viewBox={`0 0 ${BIRD_W} ${BIRD_H}`}
       shapeRendering="crispEdges"
+      animate={{ scaleY: [1, 0.78, 1] }}
+      transition={{ duration: 0.22, repeat: Infinity, ease: "easeInOut" }}
     >
-      {RECTS.map(([x, y, w, fill], i) => (
+      {BIRD_RECTS.map(([x, y, w, fill], i) => (
         <rect key={i} x={x} y={y} width={w} height={1} fill={fill} />
       ))}
-    </svg>
+    </motion.svg>
   </motion.div>
 )
+
+export const PixelPlant = ({ className = "" }: { className?: string }) => {
+  const [birds, setBirds] = useState<number[]>([])
+  const nextId = useRef(0)
+
+  const releaseBird = () =>
+    setBirds((current) => [...current, nextId.current++])
+
+  return (
+    <div className={`absolute ${className}`}>
+      <AnimatePresence>
+        {birds.map((id) => (
+          <PixelBird
+            key={id}
+            onDone={() =>
+              setBirds((current) => current.filter((b) => b !== id))
+            }
+          />
+        ))}
+      </AnimatePresence>
+      <motion.button
+        type="button"
+        onClick={releaseBird}
+        whileHover={{ rotate: [-2.5, 2.5, -2.5] }}
+        whileTap={{ scaleY: 0.86, scaleX: 1.07 }}
+        transition={{
+          rotate: { duration: 0.6, repeat: Infinity, ease: "easeInOut" },
+          default: { type: "spring", stiffness: 400, damping: 14 },
+        }}
+        style={{ transformOrigin: "bottom center" }}
+        className="block cursor-pointer focus-visible:outline-none"
+        aria-label="Poke the plant"
+        title="psst… poke me"
+      >
+        <svg
+          width={W * PIXEL}
+          height={H * PIXEL}
+          viewBox={`0 0 ${W} ${H}`}
+          shapeRendering="crispEdges"
+        >
+          {RECTS.map(([x, y, w, fill], i) => (
+            <rect key={i} x={x} y={y} width={w} height={1} fill={fill} />
+          ))}
+        </svg>
+      </motion.button>
+    </div>
+  )
+}

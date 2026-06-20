@@ -946,24 +946,51 @@ export const RoomView = ({
               </Button>
             )}
             {onSetSpectator && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => onSetSpectator(!amSpectator)}
-                title={
-                  amSpectator
-                    ? "You're watching — click to pick up cards and vote"
-                    : "Sit out the voting and just watch (handy for facilitators)"
-                }
+              <div
+                role="radiogroup"
+                aria-label="Your role"
                 className={cn(
-                  "border text-xs",
-                  amSpectator
-                    ? "border-sky-400/50 bg-sky-500/15 text-sky-300 hover:bg-sky-500/25 hover:text-sky-200 dark:hover:bg-sky-500/25"
-                    : s.themeBtn,
+                  "flex items-center gap-0.5 rounded-full border p-0.5 text-xs font-medium",
+                  theme === "light"
+                    ? "border-slate-300 bg-slate-100"
+                    : "border-white/15 bg-white/5",
                 )}
               >
-                {amSpectator ? "👀 Watching" : "🃏 Voting"}
-              </Button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={!amSpectator}
+                  onClick={() => onSetSpectator(false)}
+                  title="Pick up cards and vote this round"
+                  className={cn(
+                    "rounded-full px-2.5 py-1 transition-colors",
+                    !amSpectator
+                      ? "bg-indigo-500 text-white shadow-sm"
+                      : theme === "light"
+                        ? "text-slate-500 hover:text-slate-800"
+                        : "text-white/55 hover:text-white",
+                  )}
+                >
+                  🃏 Voter
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={amSpectator}
+                  onClick={() => onSetSpectator(true)}
+                  title="Sit out the voting and just watch (handy for facilitators)"
+                  className={cn(
+                    "rounded-full px-2.5 py-1 transition-colors",
+                    amSpectator
+                      ? "bg-sky-500 text-white shadow-sm"
+                      : theme === "light"
+                        ? "text-slate-500 hover:text-slate-800"
+                        : "text-white/55 hover:text-white",
+                  )}
+                >
+                  👀 Spectator
+                </button>
+              </div>
             )}
             {onUpdateProfile && (
               <SettingsDialog
@@ -1021,6 +1048,7 @@ export const RoomView = ({
             voteCount={voteCount}
             suggestedEstimate={suggestedEstimate}
             headerClass={s.header}
+            theme={theme}
             timerActive={!!state.timer}
             onReveal={onReveal}
             onReset={onReset}
@@ -1055,10 +1083,7 @@ export const RoomView = ({
           <PixelPet />
           <PixelWaiter active={coffeeRun} onDone={() => setCoffeeRun(false)} />
           <PixelPlant className="bottom-4 left-4 hidden opacity-90 md:block" />
-          <PixelPlant
-            className="bottom-4 right-4 hidden opacity-90 md:block"
-            delay={1.3}
-          />
+          <PixelPlant className="bottom-4 right-4 hidden opacity-90 md:block" />
           {/* Mobile — roster grid, no table */}
           <div className="md:hidden w-full max-h-full overflow-y-auto px-4 py-5 flex flex-col items-center gap-6">
             <div
@@ -1196,8 +1221,8 @@ export const RoomView = ({
                         revealed={state.revealed}
                         index={i}
                         dealFrom={{
-                          x: 70 * Math.cos(seatAngle(i, seated.length)),
-                          y: 56 * Math.sin(seatAngle(i, seated.length)),
+                          x: 95 * Math.cos(seatAngle(i, seated.length)),
+                          y: 150 * Math.sin(seatAngle(i, seated.length)),
                         }}
                       />
                     </div>
@@ -1324,6 +1349,7 @@ export const RoomView = ({
                     >
                       <PlayingCard
                         card={card}
+                        theme={theme}
                         selected={me?.vote === card.value}
                         disabled={state.revealed}
                         onSelect={handleVote}

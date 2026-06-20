@@ -23,13 +23,22 @@ export const TableCard = ({
 }: Props) => {
   const showValue = revealed && participant.vote !== null
   const origin = dealFrom ?? { x: 0, y: 14 }
+  // Before the reveal each card waits in front of its owner; on reveal every
+  // card glides to its spot on the felt (and flips), so the cards visibly come
+  // from the players rather than appearing from a central deck.
+  const resting = revealed ? { x: 0, y: 0 } : origin
 
   return (
     <motion.div
       initial={{ scale: 0.6, x: origin.x, y: origin.y, opacity: 0 }}
-      animate={{ scale: 1, x: 0, y: 0, opacity: 1 }}
+      animate={{ scale: 1, x: resting.x, y: resting.y, opacity: 1 }}
       exit={{ scale: 0.6, x: origin.x, y: origin.y, opacity: 0 }}
-      transition={{ type: "spring", stiffness: 330, damping: 26 }}
+      transition={{
+        type: "spring",
+        stiffness: 330,
+        damping: 26,
+        delay: revealed ? index * 0.08 : 0,
+      }}
       style={{ perspective: 900 }}
       className="w-10 h-14 sm:w-12 sm:h-16"
     >

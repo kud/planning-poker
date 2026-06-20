@@ -10,6 +10,7 @@ type Props = {
   disabled: boolean
   onSelect: (value: string) => void
   hotkey?: string
+  theme?: "dark" | "light"
 }
 
 export const PlayingCard = ({
@@ -18,6 +19,7 @@ export const PlayingCard = ({
   disabled,
   onSelect,
   hotkey,
+  theme = "dark",
 }: Props) => (
   <motion.button
     data-card={card.value}
@@ -30,7 +32,9 @@ export const PlayingCard = ({
       "relative flex w-11 h-16 sm:w-14 sm:h-20 rounded-lg sm:rounded-xl border-2 flex-col items-center justify-center select-none cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent",
       selected
         ? "border-primary bg-primary text-white shadow-[0_0_28px_rgba(99,102,241,0.65)]"
-        : "border-white/20 bg-[#fffdf7] text-slate-900 shadow-[0_4px_20px_rgba(0,0,0,0.35)] hover:shadow-[0_8px_30px_rgba(99,102,241,0.3)] hover:border-primary/40",
+        : theme === "light"
+          ? "border-slate-300 bg-white text-slate-900 shadow-[0_2px_10px_rgba(15,23,42,0.1)] hover:border-primary/50 hover:shadow-[0_8px_24px_rgba(99,102,241,0.25)]"
+          : "border-white/20 bg-[#fffdf7] text-slate-900 shadow-[0_4px_20px_rgba(0,0,0,0.35)] hover:shadow-[0_8px_30px_rgba(99,102,241,0.3)] hover:border-primary/40",
       disabled && "opacity-40 cursor-not-allowed",
     )}
   >
@@ -38,7 +42,7 @@ export const PlayingCard = ({
       <kbd
         className={cn(
           "absolute top-1 left-1.5 hidden sm:block text-[9px] font-mono leading-none",
-          selected ? "text-white/60" : "text-slate-300",
+          selected ? "text-white/60" : "text-slate-400",
         )}
       >
         {hotkey}
