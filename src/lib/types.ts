@@ -1,3 +1,5 @@
+import type { SessionStats } from "./session-stats"
+
 export type CardValue = string
 
 export type Card = {
@@ -18,6 +20,7 @@ export type Participant = {
   avatar: string
   vote: CardValue | null
   isHost: boolean
+  isSpectator?: boolean
 }
 
 export type Topic = {
@@ -53,6 +56,8 @@ export type RoomState = {
   } | null
   requireApproval: boolean
   pending: Record<string, { id: string; name: string; avatar: string }>
+  timer: { endsAt: number } | null
+  sessionStats: SessionStats
 }
 
 export type Message =
@@ -74,6 +79,9 @@ export type Message =
     }
   | { type: "clear-history" }
   | { type: "set-auto-reveal"; enabled: boolean }
+  | { type: "set-spectator"; enabled: boolean }
+  | { type: "start-timer"; seconds: number }
+  | { type: "clear-timer" }
   | { type: "request-break" }
   | { type: "break-vote"; accept: boolean }
   | { type: "set-break-time"; seconds: number }

@@ -89,6 +89,9 @@ const GuestRoomConnected = ({
     editHistory,
     clearHistory,
     setAutoReveal,
+    setSpectator,
+    startTimer,
+    clearTimer,
     requestBreak,
     voteBreak,
     setBreakTime,
@@ -203,6 +206,9 @@ const GuestRoomConnected = ({
         onEditHistory={editHistory}
         onClearHistory={clearHistory}
         onSetAutoReveal={setAutoReveal}
+        onSetSpectator={setSpectator}
+        onStartTimer={startTimer}
+        onClearTimer={clearTimer}
         onRequestBreak={requestBreak}
         onVoteBreak={voteBreak}
         onSetBreakTime={setBreakTime}

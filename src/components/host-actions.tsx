@@ -14,12 +14,21 @@ type Props = {
   voteCount: number
   suggestedEstimate: string | null
   headerClass: string
+  timerActive?: boolean
   onReveal?: () => void
   onReset?: () => void
   onRollSpeaker?: () => void
   onSaveRound?: (estimate: string) => void
   onSetAutoReveal?: (enabled: boolean) => void
+  onStartTimer?: (seconds: number) => void
+  onClearTimer?: () => void
 }
+
+const TIMER_PRESETS = [
+  { seconds: 30, label: "30s" },
+  { seconds: 60, label: "1m" },
+  { seconds: 120, label: "2m" },
+]
 
 export const HostActions = ({
   revealed,
@@ -30,11 +39,14 @@ export const HostActions = ({
   voteCount,
   suggestedEstimate,
   headerClass,
+  timerActive,
   onReveal,
   onReset,
   onRollSpeaker,
   onSaveRound,
   onSetAutoReveal,
+  onStartTimer,
+  onClearTimer,
 }: Props) => (
   <div
     className={`flex-none border-b ${headerClass} backdrop-blur-md px-3 py-2 flex items-center justify-center gap-2.5 z-10`}
@@ -82,6 +94,33 @@ export const HostActions = ({
             Auto-reveal
           </button>
         )}
+        {onStartTimer &&
+          (timerActive ? (
+            <button
+              type="button"
+              onClick={onClearTimer}
+              title="Cancel the round timer"
+              className="flex items-center gap-1.5 rounded-full border border-amber-400/50 bg-amber-500/15 px-3 py-1.5 text-[11px] font-medium tracking-wide text-amber-200 transition-colors hover:bg-amber-500/25"
+            >
+              ⏱ Cancel timer
+            </button>
+          ) : (
+            <div className="flex items-center gap-1 rounded-full border border-white/15 bg-white/5 px-2 py-1 text-[11px] text-white/55">
+              <span title="Start a countdown for this round" className="px-0.5">
+                ⏱
+              </span>
+              {TIMER_PRESETS.map((p) => (
+                <button
+                  key={p.seconds}
+                  type="button"
+                  onClick={() => onStartTimer(p.seconds)}
+                  className="rounded-full px-2 py-0.5 font-medium transition-colors hover:bg-white/10 hover:text-white"
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          ))}
       </>
     ) : (
       <>

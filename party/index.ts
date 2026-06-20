@@ -1,5 +1,6 @@
 import type * as Party from "partykit/server"
 import type { Deck, HistoryEntry, Message, RoomState } from "../src/lib/types"
+import { freshStats, recordReveal } from "../src/lib/session-stats"
 
 const defaultDeck = (): Deck => ({
   preset: "fibonacci",
@@ -48,6 +49,8 @@ const freshState = (): RoomState => ({
   break: null,
   requireApproval: false,
   pending: {},
+  timer: null,
+  sessionStats: freshStats(),
 })
 
 const clampText = (value: unknown, max = MAX_TEXT_LEN) =>
@@ -216,6 +219,7 @@ export default class PokerRoom implements Party.Server {
         if (this.state.revealed) return
         if (!this.deckValues().has(msg.value)) return
         this.ensureParticipant(clientId, sender.id)
+        if (this.state.participants[clientId].isSpectator) return
         this.state = {
           ...this.state,
           participants: {
@@ -226,8 +230,7 @@ export default class PokerRoom implements Party.Server {
             },
           },
         }
-        if (this.state.autoReveal && this.everyoneVoted())
-          this.state = { ...this.state, revealed: true }
+        if (this.state.autoReveal && this.everyoneVoted()) this.revealRound()
         break
       }
       case "update-profile": {
@@ -253,7 +256,7 @@ export default class PokerRoom implements Party.Server {
       }
       case "reveal": {
         if (!isHost) return
-        this.state = { ...this.state, revealed: true }
+        this.revealRound()
         break
       }
       case "reset": {
@@ -263,7 +266,9 @@ export default class PokerRoom implements Party.Server {
       }
       case "roll-speaker": {
         if (!isHost) return
-        const ids = Object.keys(this.state.participants)
+        const ids = Object.keys(this.state.participants).filter(
+          (id) => !this.state.participants[id].isSpectator,
+        )
         const alreadySpoken = this.state.spoken.filter((id) => ids.includes(id))
         const fresh = alreadySpoken.length >= ids.length ? [] : alreadySpoken
         const candidates = ids.filter(
@@ -314,7 +319,12 @@ export default class PokerRoom implements Party.Server {
       case "set-deck": {
         if (!isHost) return
         if (!validDeck(msg.deck)) return
-        this.state = { ...this.state, deck: msg.deck, revealed: false }
+        this.state = {
+          ...this.state,
+          deck: msg.deck,
+          revealed: false,
+          timer: null,
+        }
         break
       }
       case "set-topic": {
@@ -379,7 +389,50 @@ export default class PokerRoom implements Party.Server {
           !this.state.revealed &&
           this.everyoneVoted()
         )
-          this.state = { ...this.state, revealed: true }
+          this.revealRound()
+        break
+      }
+      case "set-spectator": {
+        this.ensureParticipant(clientId, sender.id)
+        const enabled = !!msg.enabled
+        const p = this.state.participants[clientId]
+        this.state = {
+          ...this.state,
+          participants: {
+            ...this.state.participants,
+            [clientId]: {
+              ...p,
+              isSpectator: enabled,
+              vote: enabled ? null : p.vote,
+            },
+          },
+        }
+        // Stepping out as a voter can complete the round for everyone else.
+        if (
+          enabled &&
+          this.state.autoReveal &&
+          !this.state.revealed &&
+          this.everyoneVoted()
+        )
+          this.revealRound()
+        break
+      }
+      case "start-timer": {
+        if (!isHost || this.state.revealed) return
+        const seconds =
+          typeof msg.seconds === "number" && Number.isFinite(msg.seconds)
+            ? Math.max(5, Math.min(3600, Math.floor(msg.seconds)))
+            : 0
+        if (seconds === 0) return
+        this.state = {
+          ...this.state,
+          timer: { endsAt: Date.now() + seconds * 1000 },
+        }
+        break
+      }
+      case "clear-timer": {
+        if (!isHost) return
+        this.state = { ...this.state, timer: null }
         break
       }
       case "request-break": {
@@ -619,11 +672,25 @@ export default class PokerRoom implements Party.Server {
   }
 
   private everyoneVoted() {
-    const ids = Object.keys(this.state.participants)
-    return (
-      ids.length > 0 &&
-      ids.every((id) => this.state.participants[id].vote !== null)
+    const voters = Object.values(this.state.participants).filter(
+      (p) => !p.isSpectator,
     )
+    return voters.length > 0 && voters.every((p) => p.vote !== null)
+  }
+
+  // The single false→true reveal transition: clears the timer and folds the
+  // round into the session tallies exactly once.
+  private revealRound() {
+    if (this.state.revealed) return
+    this.state = {
+      ...this.state,
+      revealed: true,
+      timer: null,
+      sessionStats: recordReveal(
+        this.state.sessionStats,
+        Object.values(this.state.participants),
+      ),
+    }
   }
 
   private clearedRound(): RoomState {
@@ -632,6 +699,7 @@ export default class PokerRoom implements Party.Server {
       revealed: false,
       speaker: null,
       spoken: [],
+      timer: null,
       participants: Object.fromEntries(
         Object.entries(this.state.participants).map(([id, p]) => [
           id,
