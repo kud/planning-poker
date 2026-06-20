@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { createPortal } from "react-dom"
-import { X, Pencil } from "lucide-react"
+import { X, Pencil, History, Check } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -233,7 +233,10 @@ export const SessionHistory = ({
         className={triggerClassName}
         onClick={() => setOpen(true)}
       >
-        🗂 History{history.length > 0 ? ` · ${history.length}` : ""}
+        <span className="flex items-center gap-1.5">
+          <History className="h-3.5 w-3.5" /> History
+          {history.length > 0 ? ` · ${history.length}` : ""}
+        </span>
       </Button>
 
       {typeof document !== "undefined" &&
@@ -266,7 +269,7 @@ export const SessionHistory = ({
                       )}
                     >
                       <h2 className="flex items-center gap-2 text-base font-bold tracking-tight">
-                        <span aria-hidden>🗂</span>
+                        <History className="h-4 w-4" />
                         Session history
                         {history.length > 0 && (
                           <span
@@ -334,7 +337,13 @@ export const SessionHistory = ({
                             onClick={() => copy("md")}
                             className={copyBtn}
                           >
-                            {copied === "md" ? "Copied ✓" : "Copy as Markdown"}
+                            {copied === "md" ? (
+                              <span className="flex items-center gap-1">
+                                Copied <Check className="h-3.5 w-3.5" />
+                              </span>
+                            ) : (
+                              "Copy as Markdown"
+                            )}
                           </Button>
                           <Button
                             size="sm"
@@ -342,7 +351,13 @@ export const SessionHistory = ({
                             onClick={() => copy("csv")}
                             className={copyBtn}
                           >
-                            {copied === "csv" ? "Copied ✓" : "Copy as CSV"}
+                            {copied === "csv" ? (
+                              <span className="flex items-center gap-1">
+                                Copied <Check className="h-3.5 w-3.5" />
+                              </span>
+                            ) : (
+                              "Copy as CSV"
+                            )}
                           </Button>
                           {isHost && (
                             <Button

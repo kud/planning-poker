@@ -8,7 +8,29 @@ import {
   useReducedMotion,
   MotionConfig,
 } from "framer-motion"
-import { Monitor, Moon, Sun, Volume2, VolumeX } from "lucide-react"
+import {
+  Monitor,
+  Moon,
+  Sun,
+  Volume2,
+  VolumeX,
+  Crown,
+  Lock,
+  LockOpen,
+  Flame,
+  Swords,
+  Vote,
+  Eye,
+  Coffee,
+  Dices,
+  Mic,
+  Hand,
+  Check,
+  ChevronDown,
+  AlarmClock,
+  Timer,
+  Spade,
+} from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { SeatAvatar } from "@/components/seat-avatar"
@@ -341,9 +363,17 @@ const ShareMenu = ({
         size="sm"
         data-tour="share"
         onClick={() => setOpen((v) => !v)}
-        className={`border text-xs ${btnClass}`}
+        className={`flex items-center gap-1 border text-xs ${btnClass}`}
       >
-        {copiedMode ? "Copied ✓" : "Share ▾"}
+        {copiedMode ? (
+          <>
+            Copied <Check className="h-3.5 w-3.5" />
+          </>
+        ) : (
+          <>
+            Share <ChevronDown className="h-3.5 w-3.5" />
+          </>
+        )}
       </Button>
       {open && (
         <div
@@ -357,7 +387,13 @@ const ShareMenu = ({
                 setOpen(false)
               }}
             >
-              {copiedMode === "code" ? "✓ Copied" : "Copy code"}
+              {copiedMode === "code" ? (
+                <span className="flex items-center gap-1">
+                  <Check className="h-3.5 w-3.5" /> Copied
+                </span>
+              ) : (
+                "Copy code"
+              )}
             </button>
           )}
           {onCopyLink && (
@@ -368,7 +404,13 @@ const ShareMenu = ({
                 setOpen(false)
               }}
             >
-              {copiedMode === "link" ? "✓ Copied" : "Copy link"}
+              {copiedMode === "link" ? (
+                <span className="flex items-center gap-1">
+                  <Check className="h-3.5 w-3.5" /> Copied
+                </span>
+              ) : (
+                "Copy link"
+              )}
             </button>
           )}
         </div>
@@ -383,12 +425,14 @@ const RoundControls = ({
   allVoted,
   total,
   roomId,
+  theme,
 }: {
   state: RoomState
   voteCount: number
   allVoted: boolean
   total: number
   roomId?: string
+  theme: "dark" | "light"
 }) => {
   const pending = Object.values(state.participants).filter(
     (p) => p.vote === null && !p.isSpectator,
@@ -440,6 +484,7 @@ const RoundControls = ({
           <VoteSummary
             participants={state.participants}
             revealed={state.revealed}
+            theme={theme}
           />
         </motion.div>
       )}
@@ -476,13 +521,17 @@ const CountdownPill = ({ endsAt }: { endsAt: number }) => {
       )}
     >
       <motion.span
-        className="text-lg"
+        className="flex items-center"
         animate={urgent ? { scale: [1, 1.2, 1] } : { scale: 1 }}
         transition={
           urgent ? { duration: 1, repeat: Infinity } : { duration: 0 }
         }
       >
-        {done ? "⏰" : "⏱"}
+        {done ? (
+          <AlarmClock className="h-5 w-5" />
+        ) : (
+          <Timer className="h-5 w-5" />
+        )}
       </motion.span>
       <span className="text-sm font-semibold tabular-nums tracking-wide">
         {done ? "Time's up!" : `${mm}:${ss.toString().padStart(2, "0")}`}
@@ -815,35 +864,39 @@ export const RoomView = ({
               href="/"
               className="flex items-center gap-2 sm:gap-3 hover:opacity-80 transition-opacity"
             >
-              <span className="text-xl">🃏</span>
+              <Spade className="h-5 w-5 text-indigo-400" />
               <span className="font-semibold tracking-tight hidden md:inline">
                 Planning Poker
               </span>
             </Link>
             <span
-              className="text-[11px] sm:text-xs font-mono px-2 py-0.5 rounded-full border whitespace-nowrap"
+              className="inline-flex items-center gap-1 text-[11px] sm:text-xs font-mono px-2 py-0.5 rounded-full border whitespace-nowrap"
               style={{
                 borderColor: s.badge.border,
                 color: s.badge.color,
                 background: s.badge.bg,
               }}
             >
-              {state.revealed
-                ? "Revealed"
-                : allVoted
-                  ? "All voted ✓"
-                  : `${voteCount} / ${voters.length} voted`}
+              {state.revealed ? (
+                "Revealed"
+              ) : allVoted ? (
+                <>
+                  All voted <Check className="h-3 w-3" />
+                </>
+              ) : (
+                `${voteCount} / ${voters.length} voted`
+              )}
             </span>
             {isHost && (
               <span
                 className={cn(
-                  "text-[11px] sm:text-xs px-2 py-0.5 rounded-full border whitespace-nowrap",
+                  "inline-flex items-center gap-1 text-[11px] sm:text-xs px-2 py-0.5 rounded-full border whitespace-nowrap",
                   theme === "dark"
                     ? "border-yellow-500/40 bg-yellow-500/10 text-yellow-200/90"
                     : "border-yellow-600/40 bg-yellow-100 text-yellow-800",
                 )}
               >
-                👑 Host
+                <Crown className="h-3 w-3" /> Host
               </span>
             )}
           </div>
@@ -905,15 +958,23 @@ export const RoomView = ({
                     : "Anyone with the link joins instantly. Click to approve each joiner first."
                 }
                 className={cn(
-                  "border text-xs",
+                  "flex items-center gap-1.5 border text-xs",
                   state.requireApproval
-                    ? "border-emerald-400/50 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25 hover:text-emerald-200 dark:hover:bg-emerald-500/25"
+                    ? theme === "light"
+                      ? "border-emerald-500/60 bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
+                      : "border-emerald-400/50 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25 hover:text-emerald-200 dark:hover:bg-emerald-500/25"
                     : s.themeBtn,
                 )}
               >
-                {state.requireApproval
-                  ? "🔒 Approving joiners"
-                  : "🔓 Anyone can join"}
+                {state.requireApproval ? (
+                  <>
+                    <Lock className="h-3.5 w-3.5" /> Approval needed
+                  </>
+                ) : (
+                  <>
+                    <LockOpen className="h-3.5 w-3.5" /> Anyone can join
+                  </>
+                )}
               </Button>
             )}
             {isHost && onSetRage && (
@@ -923,13 +984,16 @@ export const RoomView = ({
                 onClick={() => onSetRage(!state.rageEnabled)}
                 title="Toggle whether the Rage Mode brawl is available to the room"
                 className={cn(
-                  "border text-xs",
+                  "flex items-center gap-1.5 border text-xs",
                   state.rageEnabled
-                    ? "border-red-400/50 bg-red-500/15 text-red-300 hover:bg-red-500/25 hover:text-red-200 dark:hover:bg-red-500/25"
+                    ? theme === "light"
+                      ? "border-red-500/60 bg-red-100 text-red-700 hover:bg-red-200"
+                      : "border-red-400/50 bg-red-500/15 text-red-300 hover:bg-red-500/25 hover:text-red-200 dark:hover:bg-red-500/25"
                     : s.themeBtn,
                 )}
               >
-                🔥 Rage {state.rageEnabled ? "on" : "off"}
+                <Flame className="h-3.5 w-3.5" /> Rage{" "}
+                {state.rageEnabled ? "on" : "off"}
               </Button>
             )}
             {state.rageEnabled && onRageMove && ragePlayers && (
@@ -940,9 +1004,14 @@ export const RoomView = ({
                   onInviteRage?.()
                   setRageActive(true)
                 }}
-                className="border border-red-400/50 bg-red-500/20 text-xs font-semibold text-red-100 hover:bg-red-500/30 hover:text-white dark:hover:bg-red-500/30"
+                className={cn(
+                  "flex items-center gap-1.5 border text-xs font-semibold",
+                  theme === "light"
+                    ? "border-red-500/60 bg-red-100 text-red-700 hover:bg-red-200"
+                    : "border-red-400/50 bg-red-500/20 text-red-100 hover:bg-red-500/30 hover:text-white dark:hover:bg-red-500/30",
+                )}
               >
-                👊 Brawl
+                <Swords className="h-3.5 w-3.5" /> Brawl
               </Button>
             )}
             {onSetSpectator && (
@@ -963,7 +1032,7 @@ export const RoomView = ({
                   onClick={() => onSetSpectator(false)}
                   title="Pick up cards and vote this round"
                   className={cn(
-                    "rounded-full px-2.5 py-1 transition-colors",
+                    "inline-flex items-center gap-1 rounded-full px-2.5 py-1 transition-colors",
                     !amSpectator
                       ? "bg-indigo-500 text-white shadow-sm"
                       : theme === "light"
@@ -971,7 +1040,7 @@ export const RoomView = ({
                         : "text-white/55 hover:text-white",
                   )}
                 >
-                  🃏 Voter
+                  <Vote className="h-3.5 w-3.5" /> Voter
                 </button>
                 <button
                   type="button"
@@ -980,7 +1049,7 @@ export const RoomView = ({
                   onClick={() => onSetSpectator(true)}
                   title="Sit out the voting and just watch (handy for facilitators)"
                   className={cn(
-                    "rounded-full px-2.5 py-1 transition-colors",
+                    "inline-flex items-center gap-1 rounded-full px-2.5 py-1 transition-colors",
                     amSpectator
                       ? "bg-sky-500 text-white shadow-sm"
                       : theme === "light"
@@ -988,7 +1057,7 @@ export const RoomView = ({
                         : "text-white/55 hover:text-white",
                   )}
                 >
-                  👀 Spectator
+                  <Eye className="h-3.5 w-3.5" /> Spectator
                 </button>
               </div>
             )}
@@ -1149,6 +1218,7 @@ export const RoomView = ({
                 allVoted={allVoted}
                 total={voters.length}
                 roomId={roomId}
+                theme={theme}
               />
             </div>
           </div>
@@ -1203,6 +1273,7 @@ export const RoomView = ({
                 allVoted={allVoted}
                 total={voters.length}
                 roomId={roomId}
+                theme={theme}
               />
             </div>
 
@@ -1279,7 +1350,7 @@ export const RoomView = ({
                   )}
                 >
                   <span className="flex h-8 items-center gap-1.5">
-                    ☕ Break
+                    <Coffee className="h-4 w-4" /> Break
                   </span>
                 </button>
               )}
@@ -1288,17 +1359,19 @@ export const RoomView = ({
           )}
           {amSpectator ? (
             <div className="flex flex-col items-center gap-2 py-3 text-center">
-              <p className={`text-sm font-medium ${s.handLabel}`}>
-                👀 You&apos;re watching this session
+              <p
+                className={`flex items-center justify-center gap-1.5 text-sm font-medium ${s.handLabel}`}
+              >
+                <Eye className="h-4 w-4" /> You&apos;re watching this session
               </p>
               {onSetSpectator && (
                 <Button
                   size="sm"
                   variant="ghost"
                   onClick={() => onSetSpectator(false)}
-                  className={`border text-xs ${s.themeBtn}`}
+                  className={`flex items-center gap-1.5 border text-xs ${s.themeBtn}`}
                 >
-                  🃏 Pick up cards &amp; vote
+                  <Vote className="h-3.5 w-3.5" /> Pick up cards &amp; vote
                 </Button>
               )}
             </div>
@@ -1372,13 +1445,28 @@ export const RoomView = ({
           onAdmit &&
           onDeny &&
           Object.keys(state.pending).length > 0 && (
-            <div className="fixed right-3 top-20 z-50 flex w-60 flex-col gap-2 rounded-xl border border-emerald-400/40 bg-[#0d1117]/95 p-3 shadow-[0_0_30px_rgba(16,185,129,0.25)] backdrop-blur-md">
-              <span className="text-xs font-bold uppercase tracking-widest text-emerald-300">
-                ✋ Waiting to join
+            <div
+              className={cn(
+                "fixed right-3 top-20 z-50 flex w-60 flex-col gap-2 rounded-xl border border-emerald-400/40 p-3 shadow-[0_0_30px_rgba(16,185,129,0.25)] backdrop-blur-md",
+                theme === "light" ? "bg-white/95" : "bg-[#0d1117]/95",
+              )}
+            >
+              <span
+                className={cn(
+                  "flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest",
+                  theme === "light" ? "text-emerald-700" : "text-emerald-300",
+                )}
+              >
+                <Hand className="h-3.5 w-3.5" /> Waiting to join
               </span>
               {Object.values(state.pending).map((p) => (
                 <div key={p.id} className="flex items-center gap-2">
-                  <span className="min-w-0 flex-1 truncate text-sm text-white">
+                  <span
+                    className={cn(
+                      "min-w-0 flex-1 truncate text-sm",
+                      theme === "light" ? "text-slate-900" : "text-white",
+                    )}
+                  >
                     {p.name}
                   </span>
                   <Button
@@ -1391,7 +1479,12 @@ export const RoomView = ({
                   <Button
                     size="sm"
                     variant="ghost"
-                    className="h-7 px-2 text-xs text-slate-400 hover:text-white"
+                    className={cn(
+                      "h-7 px-2 text-xs",
+                      theme === "light"
+                        ? "text-slate-500 hover:text-slate-900"
+                        : "text-slate-400 hover:text-white",
+                    )}
                     onClick={() => onDeny(p.id)}
                   >
                     Deny
@@ -1511,12 +1604,14 @@ export const RoomView = ({
                   <motion.span
                     animate={{ rotate: 720 }}
                     transition={{ duration: 0.85, ease: "easeOut" }}
-                    className="text-lg"
+                    className="flex items-center"
                   >
-                    🎲
+                    <Dices className="h-5 w-5" />
                   </motion.span>
                 ) : (
-                  <span className="text-lg">🎤</span>
+                  <span className="flex items-center">
+                    <Mic className="h-5 w-5" />
+                  </span>
                 )}
                 <span className="text-sm font-medium text-amber-100">
                   {rollingDice

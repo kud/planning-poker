@@ -26,6 +26,7 @@ const CountUp = ({ value }: { value: number }) => {
 type Props = {
   participants: Record<string, Participant>
   revealed: boolean
+  theme?: "dark" | "light"
 }
 
 const StatChip = ({
@@ -33,11 +34,13 @@ const StatChip = ({
   children,
   delay,
   highlight,
+  dark,
 }: {
   label: string
   children: React.ReactNode
   delay: number
   highlight?: boolean
+  dark: boolean
 }) => (
   <motion.div
     initial={{ opacity: 0, y: 16, scale: 0.8 }}
@@ -46,13 +49,19 @@ const StatChip = ({
     className={
       highlight
         ? "flex flex-col items-center rounded-xl border border-primary/50 bg-primary/20 px-4 py-2 min-w-[52px] shadow-[0_0_16px_rgba(99,102,241,0.3)]"
-        : "flex flex-col items-center rounded-xl border border-white/10 bg-white/8 px-4 py-2 min-w-[52px]"
+        : dark
+          ? "flex flex-col items-center rounded-xl border border-white/10 bg-white/8 px-4 py-2 min-w-[52px]"
+          : "flex flex-col items-center rounded-xl border border-slate-200 bg-slate-100 px-4 py-2 min-w-[52px]"
     }
   >
     {children}
     <span
       className={
-        highlight ? "text-[11px] text-indigo-400" : "text-[11px] text-slate-400"
+        highlight
+          ? "text-[11px] text-indigo-400"
+          : dark
+            ? "text-[11px] text-slate-400"
+            : "text-[11px] text-slate-500"
       }
     >
       {label}
@@ -60,7 +69,16 @@ const StatChip = ({
   </motion.div>
 )
 
-export const VoteSummary = ({ participants, revealed }: Props) => {
+export const VoteSummary = ({
+  participants,
+  revealed,
+  theme = "dark",
+}: Props) => {
+  const dark = theme !== "light"
+  const tallyColor = dark ? "text-white" : "text-slate-900"
+  const medianColor = dark ? "text-slate-200" : "text-slate-700"
+  const spreadColor = dark ? "text-amber-300" : "text-amber-600"
+  const avgColor = dark ? "text-indigo-300" : "text-indigo-600"
   const votes = Object.values(participants)
     .filter((p) => p.vote !== null)
     .map((p) => p.vote!)
@@ -80,8 +98,13 @@ export const VoteSummary = ({ participants, revealed }: Props) => {
           className="flex flex-wrap gap-2 items-center justify-center pt-2"
         >
           {stats.tally.map(({ value, count }, i) => (
-            <StatChip key={value} label={`×${count}`} delay={i * 0.06}>
-              <span className="text-xl font-bold text-white">{value}</span>
+            <StatChip
+              key={value}
+              label={`×${count}`}
+              delay={i * 0.06}
+              dark={dark}
+            >
+              <span className={`text-xl font-bold ${tallyColor}`}>{value}</span>
             </StatChip>
           ))}
           {stats.average !== null && (
@@ -89,22 +112,31 @@ export const VoteSummary = ({ participants, revealed }: Props) => {
               label="avg"
               delay={stats.tally.length * 0.06 + 0.06}
               highlight
+              dark={dark}
             >
-              <span className="text-xl font-bold text-indigo-300">
+              <span className={`text-xl font-bold ${avgColor}`}>
                 <CountUp value={stats.average} />
               </span>
             </StatChip>
           )}
           {stats.median !== null && (
-            <StatChip label="median" delay={stats.tally.length * 0.06 + 0.12}>
-              <span className="text-xl font-bold text-slate-200">
+            <StatChip
+              label="median"
+              delay={stats.tally.length * 0.06 + 0.12}
+              dark={dark}
+            >
+              <span className={`text-xl font-bold ${medianColor}`}>
                 {stats.median}
               </span>
             </StatChip>
           )}
           {showSpread && (
-            <StatChip label="spread" delay={stats.tally.length * 0.06 + 0.18}>
-              <span className="text-xl font-bold text-amber-300">
+            <StatChip
+              label="spread"
+              delay={stats.tally.length * 0.06 + 0.18}
+              dark={dark}
+            >
+              <span className={`text-xl font-bold ${spreadColor}`}>
                 {stats.min}–{stats.max}
               </span>
             </StatChip>

@@ -1,6 +1,7 @@
 "use client"
 
 import { motion } from "framer-motion"
+import { Crown, Mic, Check, Eye } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Participant } from "@/lib/types"
 import { avatarUrl } from "@/lib/avatar"
@@ -59,7 +60,7 @@ export const SeatAvatar = ({
           )}
         />
         {participant.isHost && (
-          <span className="absolute -top-2 -right-2 text-xs">👑</span>
+          <Crown className="absolute -top-2 -right-2 h-3.5 w-3.5 text-amber-400 drop-shadow" />
         )}
         {isSpeaker && (
           <>
@@ -67,9 +68,9 @@ export const SeatAvatar = ({
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
               transition={{ type: "spring", stiffness: 400, damping: 18 }}
-              className="absolute -bottom-3 -right-5 text-xl"
+              className="absolute -bottom-3 -right-5"
             >
-              🎤
+              <Mic className="h-4 w-4 text-amber-300" />
             </motion.span>
             <motion.span
               className="absolute inset-0 rounded-xl ring-2 ring-amber-300/80 pointer-events-none"
@@ -83,16 +84,16 @@ export const SeatAvatar = ({
           </>
         )}
         {!isSpeaker && hasSpoken && (
-          <span className="absolute -bottom-1 -right-1 text-[10px] rounded-full bg-emerald-500/90 text-white w-4 h-4 flex items-center justify-center">
-            ✓
+          <span className="absolute -bottom-1 -right-1 rounded-full bg-emerald-500/90 text-white w-4 h-4 flex items-center justify-center">
+            <Check className="h-2.5 w-2.5" />
           </span>
         )}
         {participant.isSpectator && (
           <span
-            className="absolute -bottom-1.5 -right-1.5 text-[10px]"
+            className="absolute -bottom-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-sky-500 text-white"
             title="Watching"
           >
-            👀
+            <Eye className="h-2.5 w-2.5" />
           </span>
         )}
       </motion.div>

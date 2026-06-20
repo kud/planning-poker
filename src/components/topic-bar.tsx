@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { Pin, ExternalLink } from "lucide-react"
 import { Topic } from "@/lib/types"
 import { Button } from "@/components/ui/button"
 
@@ -79,7 +80,7 @@ export const TopicBar = ({ topic, isHost, theme, onSetTopic }: Props) => {
         <span
           className={`flex items-center gap-2 rounded-full border px-3 py-1 ${chip}`}
         >
-          <span aria-hidden>📌</span>
+          <Pin className="h-3.5 w-3.5 shrink-0" />
           <span className="truncate max-w-[55vw] font-medium">
             {topic.title || "Untitled topic"}
           </span>
@@ -88,9 +89,9 @@ export const TopicBar = ({ topic, isHost, theme, onSetTopic }: Props) => {
               href={topic.url}
               target="_blank"
               rel="noopener noreferrer"
-              className={`whitespace-nowrap text-xs ${link}`}
+              className={`flex items-center gap-0.5 whitespace-nowrap text-xs ${link}`}
             >
-              open ↗
+              open <ExternalLink className="h-3 w-3" />
             </a>
           )}
           {isHost && (
@@ -108,10 +109,10 @@ export const TopicBar = ({ topic, isHost, theme, onSetTopic }: Props) => {
         <Button
           size="sm"
           variant="ghost"
-          className={`h-8 border ${btnClass}`}
+          className={`flex h-8 items-center gap-1.5 border ${btnClass}`}
           onClick={open}
         >
-          📌 Add a topic
+          <Pin className="h-3.5 w-3.5" /> Add a topic
         </Button>
       ) : (
         <span className={muted}>No topic set</span>

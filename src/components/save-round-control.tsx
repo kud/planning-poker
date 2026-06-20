@@ -9,14 +9,26 @@ type Props = {
   deck: Deck
   suggested: string | null
   onSave: (estimate: string) => void
+  theme?: "dark" | "light"
 }
 
-export const SaveRoundControl = ({ deck, suggested, onSave }: Props) => {
+export const SaveRoundControl = ({
+  deck,
+  suggested,
+  onSave,
+  theme = "dark",
+}: Props) => {
   const [picked, setPicked] = useState<string | null>(suggested)
+  const light = theme === "light"
 
   return (
     <div className="flex flex-wrap items-center justify-center gap-1.5">
-      <span className="text-[10px] uppercase tracking-wide text-white/40">
+      <span
+        className={cn(
+          "text-[10px] uppercase tracking-wide",
+          light ? "text-slate-500" : "text-white/40",
+        )}
+      >
         Final
       </span>
       <div className="flex flex-wrap gap-1">
@@ -27,8 +39,12 @@ export const SaveRoundControl = ({ deck, suggested, onSave }: Props) => {
             className={cn(
               "min-w-7 rounded-md border px-1.5 py-0.5 text-xs font-semibold transition-colors",
               picked === card.value
-                ? "border-emerald-400/60 bg-emerald-500/25 text-emerald-100"
-                : "border-white/15 bg-white/5 text-white/70 hover:bg-white/10",
+                ? light
+                  ? "border-emerald-500 bg-emerald-100 text-emerald-800"
+                  : "border-emerald-400/60 bg-emerald-500/25 text-emerald-100"
+                : light
+                  ? "border-slate-300 bg-white text-slate-600 hover:bg-slate-100"
+                  : "border-white/15 bg-white/5 text-white/70 hover:bg-white/10",
             )}
           >
             {card.value}

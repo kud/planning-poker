@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { createPortal } from "react-dom"
 import { motion, AnimatePresence } from "framer-motion"
+import { BarChart3 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { computeAwards, type SessionStats } from "@/lib/session-stats"
@@ -67,7 +68,10 @@ export const SessionRecap = ({
         className={triggerClassName}
         onClick={() => setOpen(true)}
       >
-        📊 Recap{stats.rounds > 0 ? ` · ${stats.rounds}` : ""}
+        <span className="flex items-center gap-1.5">
+          <BarChart3 className="h-3.5 w-3.5" /> Recap
+          {stats.rounds > 0 ? ` · ${stats.rounds}` : ""}
+        </span>
       </Button>
 
       {typeof document !== "undefined" &&
@@ -99,7 +103,7 @@ export const SessionRecap = ({
                     )}
                   >
                     <h2 className="flex items-center gap-2 text-base font-bold tracking-tight">
-                      <span aria-hidden>📊</span> Session recap
+                      <BarChart3 className="h-4 w-4" /> Session recap
                     </h2>
                   </div>
 

@@ -1,5 +1,6 @@
 "use client"
 
+import { Timer, Dices } from "lucide-react"
 import { Deck } from "@/lib/types"
 import { Button } from "@/components/ui/button"
 import { SaveRoundControl } from "@/components/save-round-control"
@@ -55,6 +56,12 @@ export const HostActions = ({
     ? "border-slate-300 bg-white text-slate-600 hover:bg-slate-100"
     : "border-white/15 bg-white/5 text-white/55 hover:bg-white/10"
   const neutralTrack = light ? "bg-slate-300" : "bg-white/25"
+  const emeraldOn = light
+    ? "border-emerald-500/60 bg-emerald-100 text-emerald-700"
+    : "border-emerald-400/50 bg-emerald-500/15 text-emerald-200"
+  const amberOn = light
+    ? "border-amber-500/60 bg-amber-100 text-amber-700 hover:bg-amber-200"
+    : "border-amber-400/40 bg-amber-500/15 text-amber-100 hover:bg-amber-500/25"
 
   return (
     <div
@@ -82,9 +89,7 @@ export const HostActions = ({
               title="Reveal automatically once everyone has voted"
               className={cn(
                 "flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-medium tracking-wide transition-colors select-none",
-                autoReveal
-                  ? "border-emerald-400/50 bg-emerald-500/15 text-emerald-200"
-                  : neutralPill,
+                autoReveal ? emeraldOn : neutralPill,
               )}
             >
               <span
@@ -109,9 +114,12 @@ export const HostActions = ({
                 type="button"
                 onClick={onClearTimer}
                 title="Cancel the round timer"
-                className="flex items-center gap-1.5 rounded-full border border-amber-400/50 bg-amber-500/15 px-3 py-1.5 text-[11px] font-medium tracking-wide text-amber-200 transition-colors hover:bg-amber-500/25"
+                className={cn(
+                  "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-medium tracking-wide transition-colors",
+                  amberOn,
+                )}
               >
-                ⏱ Cancel timer
+                <Timer className="h-3.5 w-3.5" /> Cancel timer
               </button>
             ) : (
               <div
@@ -124,7 +132,7 @@ export const HostActions = ({
                   title="Start a countdown for this round"
                   className="px-0.5"
                 >
-                  ⏱
+                  <Timer className="h-3.5 w-3.5" />
                 </span>
                 {TIMER_PRESETS.map((p) => (
                   <button
@@ -151,6 +159,7 @@ export const HostActions = ({
               deck={deck}
               suggested={suggestedEstimate}
               onSave={onSaveRound}
+              theme={theme}
             />
           )}
           {onRollSpeaker &&
@@ -159,9 +168,10 @@ export const HostActions = ({
               <Button
                 size="sm"
                 onClick={onRollSpeaker}
-                className="border border-amber-400/30 bg-amber-500/15 text-amber-100 hover:bg-amber-500/25"
+                className={cn("flex items-center gap-1.5 border", amberOn)}
               >
-                🎲 {spokenCount === 0 ? "First speaker" : "Next speaker"}
+                <Dices className="h-4 w-4" />{" "}
+                {spokenCount === 0 ? "First speaker" : "Next speaker"}
               </Button>
             )}
           <Button
