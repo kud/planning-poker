@@ -346,6 +346,25 @@ export default class PokerRoom implements Party.Server {
         )
         return
       }
+      case "cat-stroll": {
+        // Only the host schedules the cat; relay its path to everyone else so
+        // all clients animate the same cat.
+        if (!isHost) return
+        const s = msg.stroll
+        if (
+          !s ||
+          typeof s.id !== "number" ||
+          (s.direction !== 1 && s.direction !== -1) ||
+          !Array.isArray(s.segments) ||
+          s.segments.length > 24
+        )
+          return
+        this.room.broadcast(
+          JSON.stringify({ type: "cat-strolled", stroll: s } satisfies Message),
+          [sender.id],
+        )
+        return
+      }
       case "set-deck": {
         if (!isHost) return
         if (!validDeck(msg.deck)) return

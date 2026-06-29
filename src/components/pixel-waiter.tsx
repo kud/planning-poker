@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { playClink } from "@/lib/sounds"
+import { cn } from "@/lib/utils"
 
 const PIXEL = 5
 const WALK_SPEED = 14
@@ -61,21 +62,34 @@ const STEAM_FRAMES: Array<Array<[number, number, number, number, string]>> = [
   ],
 ]
 
-const WaiterSprite = ({ frame }: { frame: number }) => (
-  <svg
-    width={15 * PIXEL}
-    height={18 * PIXEL}
-    viewBox="0 0 15 18"
-    shapeRendering="crispEdges"
-    aria-hidden
-  >
-    {[...BODY_PIXELS, ...LEG_FRAMES[frame], ...STEAM_FRAMES[frame]].map(
-      ([x, y, w, h, fill], i) => (
-        <rect key={i} x={x} y={y} width={w} height={h} fill={fill} />
-      ),
-    )}
-  </svg>
-)
+const WaiterSprite = ({
+  frame,
+  spilled,
+}: {
+  frame: number
+  spilled?: boolean
+}) => {
+  // Once spilled, the cup is empty — drop the coffee fill and the rising steam.
+  const body = spilled
+    ? BODY_PIXELS.filter(([, , , , fill]) => fill !== COFFEE)
+    : BODY_PIXELS
+  const steam = spilled ? [] : STEAM_FRAMES[frame]
+  return (
+    <svg
+      width={15 * PIXEL}
+      height={18 * PIXEL}
+      viewBox="0 0 15 18"
+      shapeRendering="crispEdges"
+      aria-hidden
+    >
+      {[...body, ...LEG_FRAMES[frame], ...steam].map(
+        ([x, y, w, h, fill], i) => (
+          <rect key={i} x={x} y={y} width={w} height={h} fill={fill} />
+        ),
+      )}
+    </svg>
+  )
+}
 
 type Phase = "in" | "pause" | "out"
 
@@ -88,11 +102,13 @@ export const PixelWaiter = ({
 }) => {
   const [phase, setPhase] = useState<Phase | null>(null)
   const [frame, setFrame] = useState(0)
+  const [spilled, setSpilled] = useState(false)
   const clinked = useRef(false)
 
   useEffect(() => {
     if (active && !phase) {
       clinked.current = false
+      setSpilled(false)
       setPhase("in")
     }
   }, [active, phase])
@@ -147,17 +163,67 @@ export const PixelWaiter = ({
             exit={{ opacity: 0, y: 4, scale: 0.9 }}
             className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-xl border border-yellow-500/40 bg-[#10131f]/95 px-3 py-1.5 text-xs text-yellow-100"
           >
-            ☕ Room service.
+            {spilled ? "Oops— my apologies!" : "☕ Room service."}
           </motion.div>
         )}
       </AnimatePresence>
       <motion.div
-        animate={walking ? { y: [0, -1, 0] } : { y: 0 }}
-        transition={
-          walking ? { duration: 0.32, repeat: Infinity, ease: "easeInOut" } : {}
+        // Clickable only while he's standing with the tray — knock the cup over.
+        onClick={() => {
+          if (phase !== "pause" || spilled) return
+          setSpilled(true)
+          playClink()
+        }}
+        className={cn(
+          "relative",
+          phase === "pause" && !spilled && "pointer-events-auto cursor-pointer",
+        )}
+        animate={
+          spilled
+            ? { rotate: [0, -8, 4, 0], y: 0 }
+            : walking
+              ? { y: [0, -1, 0] }
+              : { y: 0 }
         }
+        transition={
+          spilled
+            ? { duration: 0.5, ease: "easeOut" }
+            : walking
+              ? { duration: 0.32, repeat: Infinity, ease: "easeInOut" }
+              : {}
+        }
+        style={{ transformOrigin: "bottom center" }}
       >
-        <WaiterSprite frame={walking ? frame : 0} />
+        <WaiterSprite frame={walking ? frame : 0} spilled={spilled} />
+        {spilled && (
+          <>
+            {/* Coffee splashing out of the tipped cup */}
+            {[0, 1, 2, 3].map((i) => (
+              <motion.span
+                key={i}
+                className="absolute rounded-full bg-[#7c4a1e]"
+                style={{ width: 4, height: 4, left: 56 + i * 3, top: 32 }}
+                initial={{ y: 0, opacity: 1 }}
+                animate={{ y: 50, opacity: [1, 1, 0], scaleX: [1, 1.7] }}
+                transition={{
+                  duration: 0.6,
+                  delay: i * 0.08,
+                  repeat: Infinity,
+                  repeatDelay: 0.6,
+                  ease: "easeIn",
+                }}
+              />
+            ))}
+            {/* Puddle pooling at his feet */}
+            <motion.span
+              className="absolute rounded-full bg-[#5b3416]/80 blur-[1px]"
+              style={{ left: 40, bottom: 2, height: 6 }}
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: 30, opacity: 1 }}
+              transition={{ duration: 0.9, ease: "easeOut" }}
+            />
+          </>
+        )}
       </motion.div>
     </motion.div>
   )

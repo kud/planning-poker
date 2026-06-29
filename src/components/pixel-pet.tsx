@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { playPurr, playScamper } from "@/lib/sounds"
 import type { RemotePoke } from "@/components/pixel-dealer"
+import type { CatSegment, CatStroll } from "@/lib/types"
 
 const PIXEL = 3
 const WALK_SPEED = 6
@@ -56,11 +57,7 @@ const CatSprite = ({ flipped, frame }: { flipped: boolean; frame: number }) => (
   </svg>
 )
 
-type Segment = {
-  kind: "walk" | "sniff" | "purr" | "flee"
-  target: number
-  duration: number
-}
+type Segment = CatSegment
 
 const buildStroll = (direction: 1 | -1): Segment[] => {
   const start = direction === 1 ? -6 : 104
@@ -90,30 +87,61 @@ const buildStroll = (direction: 1 | -1): Segment[] => {
   return segments
 }
 
-type Stroll = { direction: 1 | -1; segments: Segment[]; id: number }
+type Stroll = CatStroll
 
 export const PixelPet = ({
   onPoke,
   remotePoke,
+  isHost,
+  syncedStroll,
+  onStroll,
 }: {
   onPoke?: (variant?: string) => void
   remotePoke?: RemotePoke
+  isHost?: boolean
+  syncedStroll?: CatStroll | null
+  onStroll?: (stroll: CatStroll) => void
 } = {}) => {
   const [stroll, setStroll] = useState<Stroll | null>(null)
   const [segIndex, setSegIndex] = useState(0)
   const [frame, setFrame] = useState(0)
   const wrapperRef = useRef<HTMLDivElement>(null)
 
+  // Stable ref to the (per-render) broadcast callback, so scheduling the next
+  // stroll doesn't reset its 15–60s timer on every re-render.
+  const onStrollRef = useRef(onStroll)
   useEffect(() => {
-    if (stroll) return
+    onStrollRef.current = onStroll
+  })
+
+  // The host schedules each stroll and broadcasts it; non-hosts never self-spawn
+  // — they only render the stroll they receive, so everyone shares one cat.
+  useEffect(() => {
+    if (!isHost || stroll) return
     const delay = (15 + Math.random() * 45) * 1000
     const timer = setTimeout(() => {
       const direction = Math.random() > 0.5 ? 1 : -1
-      setStroll({ direction, segments: buildStroll(direction), id: Date.now() })
+      const next: CatStroll = {
+        direction,
+        segments: buildStroll(direction),
+        id: Date.now(),
+      }
+      setStroll(next)
       setSegIndex(0)
+      onStrollRef.current?.(next)
     }, delay)
     return () => clearTimeout(timer)
-  }, [stroll])
+  }, [stroll, isHost])
+
+  // Non-hosts pick up the host's broadcast stroll.
+  const lastSynced = useRef(0)
+  useEffect(() => {
+    if (isHost || !syncedStroll || syncedStroll.id === lastSynced.current)
+      return
+    lastSynced.current = syncedStroll.id
+    setStroll(syncedStroll)
+    setSegIndex(0)
+  }, [syncedStroll, isHost])
 
   const segment = stroll?.segments[segIndex]
   const moving = segment?.kind === "walk" || segment?.kind === "flee"

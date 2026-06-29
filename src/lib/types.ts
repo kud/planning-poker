@@ -5,6 +5,19 @@ export type CardValue = string
 // Clickable ambient props that broadcast "who poked what" to the whole room.
 export type PropId = "dealer" | "cat" | "plant-left" | "plant-right"
 
+// The roaming cat's path is decided by the host and broadcast so every client
+// animates the same cat at the same spot (positions only ~network-latency apart).
+export type CatSegment = {
+  kind: "walk" | "sniff" | "purr" | "flee"
+  target: number
+  duration: number
+}
+export type CatStroll = {
+  id: number
+  direction: 1 | -1
+  segments: CatSegment[]
+}
+
 export type Card = {
   value: CardValue
   label?: string
@@ -108,6 +121,8 @@ export type Message =
     }
   | { type: "react"; emoji: string }
   | { type: "reaction"; from: string; name: string; emoji: string }
+  | { type: "cat-stroll"; stroll: CatStroll }
+  | { type: "cat-strolled"; stroll: CatStroll }
   | { type: "poke-prop"; prop: PropId; variant?: string }
   | {
       type: "prop-poked"

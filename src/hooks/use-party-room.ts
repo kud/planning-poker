@@ -2,7 +2,14 @@
 
 import { useRef, useState } from "react"
 import usePartySocket from "partysocket/react"
-import { CardValue, Deck, Message, PropId, RoomState } from "@/lib/types"
+import {
+  CardValue,
+  CatStroll,
+  Deck,
+  Message,
+  PropId,
+  RoomState,
+} from "@/lib/types"
 import { freshStats } from "@/lib/session-stats"
 
 export type ConnectionStatus = "connecting" | "connected" | "reconnecting"
@@ -93,6 +100,7 @@ export const usePartyRoom = ({
   const presenceId = useRef(0)
   const [propPokes, setPropPokes] = useState<PropPoke[]>([])
   const propPokeId = useRef(0)
+  const [catStroll, setCatStroll] = useState<CatStroll | null>(null)
   const ragePlayers = useRef<Map<string, RagePlayer>>(new Map())
   const [rageInvite, setRageInvite] = useState<RageInvite | null>(null)
   const [rageRestart, setRageRestart] = useState(0)
@@ -149,6 +157,9 @@ export const usePartyRoom = ({
           PROP_POKE_LIFETIME_MS,
         )
       }
+      if (msg.type === "cat-strolled") {
+        setCatStroll(msg.stroll)
+      }
       if (msg.type === "rage" && msg.from !== clientId) {
         ragePlayers.current.set(msg.from, {
           x: msg.x,
@@ -202,6 +213,8 @@ export const usePartyRoom = ({
     propPokes,
     pokeProp: (prop: PropId, variant?: string) =>
       send({ type: "poke-prop", prop, variant }),
+    catStroll,
+    sendCatStroll: (stroll: CatStroll) => send({ type: "cat-stroll", stroll }),
     vote: (value: string) => send({ type: "vote", value }),
     reveal: () => send({ type: "reveal" }),
     reset: () => send({ type: "reset" }),

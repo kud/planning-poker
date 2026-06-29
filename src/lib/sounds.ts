@@ -325,3 +325,47 @@ export const playCheer = (volume = 0.05) => {
   gain.connect(audio.destination)
   source.start(start)
 }
+
+// A crowd "booooo" — a low, droning roar shaped by an "oo"-vowel formant
+// (~400 Hz) with a slow downward sag, so it reads as jeering rather than cheer.
+export const playBoo = (volume = 0.06) => {
+  const audio = audioContext()
+  if (!audio || isMuted()) return
+  const start = audio.currentTime
+  const duration = 1.7
+  const length = Math.ceil(audio.sampleRate * duration)
+  const buffer = audio.createBuffer(1, length, audio.sampleRate)
+  const data = buffer.getChannelData(0)
+  // A rough crowd roar: brown-ish noise (integrated white) for a low texture.
+  let roar = 0
+  for (let i = 0; i < length; i++) {
+    const white = Math.random() * 2 - 1
+    roar = 0.92 * roar + 0.08 * white
+    data[i] = roar * 1.4
+  }
+  const source = audio.createBufferSource()
+  source.buffer = buffer
+
+  // "oo" vowel: a strong low formant ~400 Hz, everything above ~900 Hz rolled off.
+  const formant = audio.createBiquadFilter()
+  formant.type = "peaking"
+  formant.frequency.setValueAtTime(440, start)
+  formant.frequency.linearRampToValueAtTime(300, start + duration) // sag down
+  formant.Q.value = 4
+  formant.gain.value = 12
+  const lowpass = audio.createBiquadFilter()
+  lowpass.type = "lowpass"
+  lowpass.frequency.value = 900
+
+  const gain = audio.createGain()
+  gain.gain.setValueAtTime(0.0001, start)
+  gain.gain.linearRampToValueAtTime(volume, start + 0.18)
+  gain.gain.linearRampToValueAtTime(volume * 0.85, start + 1.1)
+  gain.gain.exponentialRampToValueAtTime(0.0001, start + duration)
+
+  source.connect(formant)
+  formant.connect(lowpass)
+  lowpass.connect(gain)
+  gain.connect(audio.destination)
+  source.start(start)
+}

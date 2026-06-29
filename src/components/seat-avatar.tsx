@@ -11,12 +11,22 @@ type Props = {
   theme: "dark" | "light"
   isSpeaker?: boolean
   hasSpoken?: boolean
+  onFire?: boolean
 }
 
 const NAME_COLORS = {
   dark: "text-slate-400",
   light: "text-slate-500",
 }
+
+// Flame tongues spread across the avatar's base so it reads as fully ablaze.
+const FLAME_SPOTS = [
+  { left: "-6%", size: "text-sm", delay: 0.1 },
+  { left: "18%", size: "text-lg", delay: 0 },
+  { left: "42%", size: "text-xl", delay: 0.22 },
+  { left: "66%", size: "text-lg", delay: 0.12 },
+  { left: "88%", size: "text-sm", delay: 0.3 },
+]
 
 const rhythm = (id: string) =>
   [...id].reduce((acc, char) => acc + char.charCodeAt(0), 0)
@@ -26,6 +36,7 @@ export const SeatAvatar = ({
   theme,
   isSpeaker,
   hasSpoken,
+  onFire,
 }: Props) => {
   const seed = rhythm(participant.id)
   const bobDuration = 2.2 + (seed % 5) * 0.25
@@ -57,8 +68,53 @@ export const SeatAvatar = ({
             isSpeaker &&
               "shadow-[0_0_18px_rgba(251,191,36,0.75)] ring-2 ring-amber-400",
             participant.isSpectator && "opacity-60 grayscale",
+            onFire &&
+              "ring-2 ring-orange-500 shadow-[0_0_20px_rgba(249,115,22,0.85)]",
           )}
         />
+        {onFire && (
+          <span
+            className="pointer-events-none absolute -inset-1 z-10"
+            title="In the brawl"
+          >
+            {/* flickering ember glow behind the flames */}
+            <motion.span
+              className="absolute inset-0 rounded-xl"
+              style={{
+                background:
+                  "radial-gradient(ellipse at 50% 80%, rgba(249,115,22,0.55), rgba(239,68,68,0.25) 55%, transparent 75%)",
+              }}
+              animate={{ opacity: [0.7, 1, 0.8, 1], scale: [1, 1.08, 0.97, 1] }}
+              transition={{
+                duration: 0.5,
+                repeat: Infinity,
+                ease: "easeInOut",
+              }}
+            />
+            {FLAME_SPOTS.map((f, i) => (
+              <motion.span
+                key={i}
+                className={cn("absolute -bottom-1 leading-none", f.size)}
+                style={{ left: f.left }}
+                animate={{
+                  y: [0, -5, -2, -6, 0],
+                  scaleY: [1, 1.3, 0.9, 1.2, 1],
+                  scaleX: [1, 0.85, 1.05, 0.9, 1],
+                  opacity: [0.85, 1, 0.9, 1, 0.85],
+                  rotate: [-5, 4, -3, 5, -5],
+                }}
+                transition={{
+                  duration: 0.45 + (i % 3) * 0.12,
+                  delay: f.delay,
+                  repeat: Infinity,
+                  ease: "easeInOut",
+                }}
+              >
+                🔥
+              </motion.span>
+            ))}
+          </span>
+        )}
         {participant.isHost && (
           <Crown className="absolute -top-2 -right-2 h-3.5 w-3.5 text-amber-400 drop-shadow" />
         )}
@@ -68,7 +124,7 @@ export const SeatAvatar = ({
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
               transition={{ type: "spring", stiffness: 400, damping: 18 }}
-              className="absolute -bottom-3 -right-5"
+              className="absolute -top-3 left-1/2 -translate-x-1/2"
             >
               <Mic className="h-4 w-4 text-amber-300" />
             </motion.span>

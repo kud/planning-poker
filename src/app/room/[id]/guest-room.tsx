@@ -79,6 +79,8 @@ const GuestRoomConnected = ({
     presenceEvents,
     propPokes,
     pokeProp,
+    catStroll,
+    sendCatStroll,
     react,
     vote,
     reveal,
@@ -230,6 +232,8 @@ const GuestRoomConnected = ({
         presenceEvents={presenceEvents}
         propPokes={propPokes}
         onPokeProp={pokeProp}
+        catStroll={catStroll}
+        onCatStroll={sendCatStroll}
         onCopyCode={copyCode}
         onCopyLink={copyLink}
         copiedMode={copiedMode}

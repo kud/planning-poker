@@ -54,7 +54,7 @@ import { PixelWaiter } from "@/components/pixel-waiter"
 import { PixelPlant } from "@/components/pixel-plant"
 import { ReactionBar } from "@/components/reaction-bar"
 import { FloatingReactions } from "@/components/floating-reactions"
-import { PropPokeBadges } from "@/components/prop-poke-badges"
+import { PropPokeToasts } from "@/components/prop-poke-toasts"
 import { PresenceToasts } from "@/components/presence-toasts"
 import type {
   Reaction,
@@ -63,7 +63,7 @@ import type {
   RagePlayer,
   RageInvite,
 } from "@/hooks/use-party-room"
-import type { PropId } from "@/lib/types"
+import type { CatStroll, PropId } from "@/lib/types"
 import type { MutableRefObject } from "react"
 import {
   isMuted,
@@ -127,6 +127,8 @@ type Props = {
   presenceEvents?: PresenceEvent[]
   propPokes?: PropPoke[]
   onPokeProp?: (prop: PropId, variant?: string) => void
+  catStroll?: CatStroll | null
+  onCatStroll?: (stroll: CatStroll) => void
 }
 
 export type Announcement = { emoji: string; title: string; sub: string }
@@ -587,23 +589,20 @@ export const RoomView = ({
   presenceEvents,
   propPokes,
   onPokeProp,
+  catStroll,
+  onCatStroll,
 }: Props) => {
   const [themePref, setThemePref] = useState<ThemePref>("system")
   const [systemTheme, setSystemTheme] = useState<Theme>("dark")
   const theme: Theme = themePref === "system" ? systemTheme : themePref
   const [rageActive, setRageActive] = useState(false)
-  const [flyingCard, setFlyingCard] = useState<{
-    value: string
-    label?: string
-    startX: number
-    startY: number
-    dx: number
-    dy: number
-  } | null>(null)
   const [announcement, setAnnouncement] = useState<Announcement | null>(null)
   const [rollingDice, setRollingDice] = useState(false)
   const [muted, setMutedState] = useState(false)
   const [coffeeRun, setCoffeeRun] = useState(false)
+  // Who's currently brawling (recomputed on a timer — ragePlayers is a ref and
+  // won't re-render on its own). Drives the on-fire badge in the classic view.
+  const [onFireIds, setOnFireIds] = useState<Set<string>>(new Set())
 
   // Single owned dismiss timer: any new announcement supersedes the previous
   // one's close, so an unrelated re-render can never strand the bubble open.
@@ -711,26 +710,8 @@ export const RoomView = ({
   const handleVote = (value: string) => {
     onVote(value)
     playVote()
-    const tableVisible = tableRef.current?.offsetParent != null
-    if (!tableVisible) return
-    const cardEl = document.querySelector(`[data-card="${CSS.escape(value)}"]`)
-    const cardRect = cardEl?.getBoundingClientRect()
-    const tableRect = tableRef.current!.getBoundingClientRect()
-    const startX = cardRect
-      ? cardRect.left + cardRect.width / 2
-      : window.innerWidth / 2
-    const startY = cardRect
-      ? cardRect.top + cardRect.height / 2
-      : window.innerHeight - 150
-    const card = state.deck.cards.find((c) => c.value === value)
-    setFlyingCard({
-      ...(card ?? { value }),
-      startX,
-      startY,
-      dx: tableRect.left + tableRect.width / 2 - startX,
-      dy: tableRect.top + tableRect.height / 2 - startY,
-    })
-    setTimeout(() => setFlyingCard(null), 750)
+    // No fly-to-table animation — the card resting at the player's seat
+    // (TableCard) is feedback enough.
   }
 
   useEffect(() => {
@@ -798,6 +779,27 @@ export const RoomView = ({
       document.title = "Planning Poker"
     }
   }, [state.revealed, voteCount, voters.length])
+
+  // Anyone actively brawling (or who just lit the fuse) shows on fire to those
+  // who stayed at the table. Recomputed off-render since it reads a ref + clock.
+  useEffect(() => {
+    if (!state.rageEnabled) {
+      setOnFireIds(new Set())
+      return
+    }
+    const compute = () => {
+      const now = Date.now()
+      const ids = new Set<string>()
+      if (ragePlayers)
+        for (const [id, p] of ragePlayers.current.entries())
+          if (now - p.at < 3000) ids.add(id)
+      if (rageInvite) ids.add(rageInvite.from)
+      setOnFireIds(ids)
+    }
+    compute()
+    const iv = setInterval(compute, 700)
+    return () => clearInterval(iv)
+  }, [state.rageEnabled, ragePlayers, rageInvite])
 
   const reduceMotion = useReducedMotion()
   const votes = participants
@@ -1173,6 +1175,9 @@ export const RoomView = ({
           <PixelPet
             onPoke={(v) => onPokeProp?.("cat", v)}
             remotePoke={remotePokeFor("cat")}
+            isHost={isHost}
+            syncedStroll={catStroll}
+            onStroll={onCatStroll}
           />
           <PixelWaiter active={coffeeRun} onDone={() => setCoffeeRun(false)} />
           <PixelPlant
@@ -1216,6 +1221,7 @@ export const RoomView = ({
                       theme={theme}
                       isSpeaker={participant.id === state.speaker}
                       hasSpoken={state.spoken.includes(participant.id)}
+                      onFire={onFireIds.has(participant.id)}
                     />
                     {participant.vote !== null ? (
                       <TableCard
@@ -1360,6 +1366,7 @@ export const RoomView = ({
                     theme={theme}
                     isSpeaker={participant.id === state.speaker}
                     hasSpoken={state.spoken.includes(participant.id)}
+                    onFire={onFireIds.has(participant.id)}
                   />
                 </motion.div>
               ))}
@@ -1533,7 +1540,13 @@ export const RoomView = ({
           )}
 
         {reactions && <FloatingReactions reactions={reactions} />}
-        {propPokes && <PropPokeBadges pokes={propPokes} />}
+        {/* Only other players' pokes — no toast for your own clicks. */}
+        {propPokes && (
+          <PropPokeToasts
+            pokes={propPokes.filter((p) => p.from !== myId)}
+            theme={theme}
+          />
+        )}
 
         {presenceEvents && (
           <PresenceToasts events={presenceEvents} theme={theme} />
@@ -1568,35 +1581,56 @@ export const RoomView = ({
         <AnimatePresence>
           {rageInvite && !rageActive && state.rageEnabled && (
             <motion.div
-              initial={{ opacity: 0, y: 24, scale: 0.92 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 24, scale: 0.92 }}
-              transition={{ type: "spring", stiffness: 360, damping: 26 }}
-              className="fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-2xl border-2 border-red-400/50 bg-[#140a10]/95 px-4 py-3 shadow-[0_0_36px_rgba(239,68,68,0.35)] backdrop-blur-md"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[55] flex items-center justify-center px-4 pointer-events-none"
             >
-              <span className="text-2xl">🔥</span>
-              <span className="text-sm font-medium text-red-50">
-                <span className="font-bold">{rageInvite.name}</span> started a
-                brawl!
-              </span>
-              <Button
-                size="sm"
-                onClick={() => {
-                  onDismissRageInvite?.()
-                  setRageActive(true)
-                }}
-                className="border border-red-400/50 bg-red-600/80 text-white hover:bg-red-600"
+              {/* Dim the room for drama, but let clicks fall through to it. */}
+              <div className="absolute inset-0 bg-black/35 backdrop-blur-[1px]" />
+              <motion.div
+                initial={{ scale: 0.6, opacity: 0, rotate: -4 }}
+                animate={{ scale: 1, opacity: 1, rotate: 0 }}
+                exit={{ scale: 0.7, opacity: 0 }}
+                transition={{ type: "spring", stiffness: 320, damping: 22 }}
+                className="pointer-events-auto relative flex flex-col items-center gap-3 rounded-3xl border-2 border-red-500/40 bg-[#140a10]/95 px-10 py-8 text-center shadow-[0_0_60px_rgba(239,68,68,0.45)] backdrop-blur-md"
               >
-                👊 Join the fight
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => onDismissRageInvite?.()}
-                className="text-white/60 hover:text-white"
-              >
-                Stay on the bench
-              </Button>
+                <motion.span
+                  animate={{ scale: [1, 1.12, 1], rotate: [-4, 4, -4] }}
+                  transition={{
+                    duration: 1.1,
+                    repeat: Infinity,
+                    ease: "easeInOut",
+                  }}
+                  className="text-5xl"
+                >
+                  🔥
+                </motion.span>
+                <span className="text-5xl font-black uppercase tracking-[0.15em] text-red-500 drop-shadow-[0_0_24px_rgba(239,68,68,0.8)] sm:text-6xl">
+                  Fight!
+                </span>
+                <span className="text-sm text-red-50/90">
+                  <span className="font-bold">{rageInvite.name}</span> started a
+                  brawl!
+                </span>
+                <div className="mt-2 flex items-center gap-3">
+                  <button
+                    onClick={() => {
+                      onDismissRageInvite?.()
+                      setRageActive(true)
+                    }}
+                    className="rounded-full border border-red-400/50 bg-red-600 px-5 py-2.5 text-sm font-bold text-white shadow-[0_4px_16px_rgba(239,68,68,0.4)] transition hover:bg-red-500 active:scale-95"
+                  >
+                    👊 Join the fight
+                  </button>
+                  <button
+                    onClick={() => onDismissRageInvite?.()}
+                    className="rounded-full px-5 py-2.5 text-sm font-medium text-white/55 transition hover:bg-white/10 hover:text-white"
+                  >
+                    Stay on the bench
+                  </button>
+                </div>
+              </motion.div>
             </motion.div>
           )}
         </AnimatePresence>
@@ -1664,42 +1698,6 @@ export const RoomView = ({
                   )}
                 </span>
               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Flying card — travels from hand to table on vote */}
-        <AnimatePresence>
-          {flyingCard && (
-            <motion.div
-              key={flyingCard.value + "-fly"}
-              className="fixed z-50 pointer-events-none flex flex-col items-center justify-center w-20 h-28 rounded-xl border-2 border-primary bg-[#fffdf7] shadow-[0_0_28px_rgba(99,102,241,0.65)]"
-              style={{
-                left: flyingCard.startX - 40,
-                top: flyingCard.startY - 56,
-              }}
-              initial={{ x: 0, y: 0, scale: 1, rotate: 0, opacity: 1 }}
-              animate={{
-                x: [0, flyingCard.dx, flyingCard.dx],
-                y: [0, flyingCard.dy, flyingCard.dy],
-                scale: [1, 0.78, 0.6],
-                rotate: [0, -8, 0],
-                opacity: [1, 1, 0],
-              }}
-              transition={{
-                duration: 0.75,
-                times: [0, 0.62, 1],
-                ease: "easeOut",
-              }}
-            >
-              <span className="text-2xl font-bold text-slate-800">
-                {flyingCard.value}
-              </span>
-              {flyingCard.label && (
-                <span className="text-[11px] font-semibold text-slate-400 mt-1">
-                  {flyingCard.label}
-                </span>
-              )}
             </motion.div>
           )}
         </AnimatePresence>

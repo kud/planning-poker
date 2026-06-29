@@ -12,7 +12,7 @@ import {
   playPunch,
   playHit,
   playBell,
-  playCheer,
+  playBoo,
   playRageStart,
 } from "@/lib/sounds"
 
@@ -39,6 +39,8 @@ const CHAIR_GRAB_RANGE = 0.16
 const CHAIR_DROP_MS = 450
 const HIT_COOLDOWN = 550
 const INTRO_MS = 2200
+const SNACK_PICKUP = 0.05
+const SNACK_HEAL = 8
 
 const FIGHT_QUIPS = [
   "Ohh, right in the story points!",
@@ -61,6 +63,24 @@ const FIGHT_QUIPS = [
   "Someone call the Scrum Master — oh wait, he's in the ring.",
   "That's what I call a hotfix.",
   "Ladies and gentlemen, technical debt collected.",
+]
+
+// Short heckles that pop above random ringside spectators mid-brawl.
+const SPECTATOR_SHOUTS = [
+  "BOOOO!",
+  "Rubbish!",
+  "Sit down!",
+  "My nan hits harder!",
+  "Refund!",
+  "Estimate THAT!",
+  "Use the chair!",
+  "Weak sauce!",
+  "Pathetic!",
+  "Story points?! HA!",
+  "Get him!",
+  "That's a no-vote!",
+  "Boooring!",
+  "Re-roll!",
 ]
 
 const seedX = (id: string) => 0.2 + ((id.charCodeAt(0) || 0) % 60) / 100
@@ -187,12 +207,16 @@ export const RageArena = ({
   // When a fighter took a hit → flash + shake their node until this timestamp,
   // so every point of damage has an unmistakable on-screen cause.
   const hitFlashUntil = useRef<Map<string, number>>(new Map())
+  // Same idea for a snack pickup, but a green "healed" pulse.
+  const healFlashUntil = useRef(0)
   const bloodId = useRef(0)
 
   const bots = useRef<Bot[]>([])
   const botSeq = useRef(0)
 
   const [intro, setIntro] = useState(true)
+  const [exiting, setExiting] = useState(false)
+  const exitingRef = useRef(false)
   const [brawlers, setBrawlers] = useState<string[]>([myId])
   const [botList, setBotList] = useState<
     { id: string; name: string; seed: string }[]
@@ -210,11 +234,18 @@ export const RageArena = ({
     }[]
   >([])
   const [quip, setQuip] = useState<string | null>(null)
+  const [crowdShout, setCrowdShout] = useState<{
+    id: number
+    text: string
+    side: "left" | "right"
+    top: number
+  } | null>(null)
   const [flash, setFlash] = useState<string | null>(null)
   const [cleaning, setCleaning] = useState(false)
   const [cleanerFrame, setCleanerFrame] = useState(0)
   const cleaningRef = useRef(false)
   const debrisRef = useRef(0)
+  const litterRef = useRef<typeof litter>([])
   const killsRef = useRef<Map<string, number>>(new Map())
   const winnerRef = useRef(false)
   const [leaderboard, setLeaderboard] = useState<
@@ -242,6 +273,15 @@ export const RageArena = ({
     setBloods([])
     setLitter([])
     setFlash(null)
+  }
+
+  // Don't snap straight back to the table — drop the ring curtains, then exit.
+  const beginExit = () => {
+    if (exitingRef.current) return
+    exitingRef.current = true
+    setExiting(true)
+    playBell()
+    setTimeout(onExit, 1100)
   }
 
   const addBot = () => {
@@ -296,6 +336,7 @@ export const RageArena = ({
 
   useEffect(() => {
     debrisRef.current = litter.length + pools.length
+    litterRef.current = litter
   }, [litter, pools])
 
   useEffect(() => {
@@ -375,7 +416,7 @@ export const RageArena = ({
   // Ambient crowd + ringside commentary.
   useEffect(() => {
     if (intro) return
-    const cheer = setInterval(() => playCheer(0.03), 7000)
+    const cheer = setInterval(() => playBoo(0.03), 7000)
     const talk = setInterval(() => {
       setQuip(FIGHT_QUIPS[Math.floor(Math.random() * FIGHT_QUIPS.length)])
     }, 4200)
@@ -398,12 +439,31 @@ export const RageArena = ({
         ].slice(-24),
       )
     }, 2300)
+    let shoutId = 0
+    const shout = setInterval(() => {
+      setCrowdShout({
+        id: ++shoutId,
+        text: SPECTATOR_SHOUTS[
+          Math.floor(Math.random() * SPECTATOR_SHOUTS.length)
+        ],
+        side: Math.random() < 0.5 ? "left" : "right",
+        top: 18 + Math.random() * 60,
+      })
+    }, 3300)
     return () => {
       clearInterval(cheer)
       clearInterval(talk)
       clearInterval(toss)
+      clearInterval(shout)
     }
   }, [intro])
+
+  // Each heckle clears itself shortly after it pops.
+  useEffect(() => {
+    if (!crowdShout) return
+    const t = setTimeout(() => setCrowdShout(null), 1900)
+    return () => clearTimeout(t)
+  }, [crowdShout])
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -420,7 +480,7 @@ export const RageArena = ({
         }
         return
       }
-      if (k === "escape") return onExit()
+      if (k === "escape") return beginExit()
       keys.current.add(k)
       target.current = null
     }
@@ -500,7 +560,7 @@ export const RageArena = ({
           )
           setFlash(`${meta.name} — K.O.! 💀`)
           playBell()
-          playCheer(0.06)
+          playBoo(0.05)
           setTimeout(() => setFlash(null), 1800)
           // Credit the kill to the attacker and refresh the leaderboard.
           killsRef.current.set(
@@ -545,6 +605,20 @@ export const RageArena = ({
       if (m.x <= EDGE || m.x >= 1 - EDGE) m.vx *= -0.4
       if (m.y <= EDGE || m.y >= 1 - EDGE) m.vy *= -0.4
       const mePunching = m.hp > 0 && now < punchUntil.current
+
+      // --- snack pickup: walk over floor food to recover a little health ---
+      if (!intro && m.hp > 0 && m.hp < 100 && litterRef.current.length) {
+        const eaten = litterRef.current.filter(
+          (l) => Math.hypot(l.x - m.x, l.y - m.y) < SNACK_PICKUP,
+        )
+        if (eaten.length) {
+          m.hp = Math.min(100, m.hp + eaten.length * SNACK_HEAL)
+          healFlashUntil.current = now + 320
+          const ids = new Set(eaten.map((e) => e.id))
+          litterRef.current = litterRef.current.filter((l) => !ids.has(l.id))
+          setLitter((prev) => prev.filter((l) => !ids.has(l.id)))
+        }
+      }
 
       // --- update bots (simple chase-and-punch AI) ---
       for (const bot of bots.current) {
@@ -692,7 +766,7 @@ export const RageArena = ({
             `And ${alive[0].name === "You" ? "you have" : alive[0].name + " has"} it — last one standing!`,
           )
           playBell()
-          playCheer(0.09)
+          playBoo(0.07)
         }
       }
 
@@ -735,6 +809,11 @@ export const RageArena = ({
           const isDead = hp <= 0
           const hitFlashing =
             !isDead && now < (hitFlashUntil.current.get(id) ?? 0)
+          const healFlashing =
+            !isDead &&
+            !hitFlashing &&
+            id === myId &&
+            now < healFlashUntil.current
           // A quick horizontal jitter sells the impact while the flash is up.
           const shake = hitFlashing ? Math.sin(now / 18) * 3 : 0
           node.style.transform = `translate(${pos.x * rect.width + shake}px, ${pos.y * rect.height}px) translate(-50%, -50%) scale(${isPunching ? 1.25 : 1}) rotate(${isDead ? "90deg" : "0deg"})`
@@ -743,7 +822,9 @@ export const RageArena = ({
             ? "grayscale(1) brightness(0.6)"
             : hitFlashing
               ? "brightness(1.7) drop-shadow(0 0 8px rgba(239,68,68,0.95))"
-              : "none"
+              : healFlashing
+                ? "brightness(1.3) drop-shadow(0 0 8px rgba(52,211,153,0.95))"
+                : "none"
           const fill = hpRefs.current.get(id)
           if (fill) {
             fill.style.width = `${Math.max(0, hp)}%`
@@ -879,12 +960,34 @@ export const RageArena = ({
       {tribune("left")}
       {tribune("right")}
 
+      {/* A heckle popping from the stands */}
+      <AnimatePresence>
+        {crowdShout && !intro && (
+          <motion.div
+            key={crowdShout.id}
+            initial={{ opacity: 0, y: 8, scale: 0.7 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            transition={{ type: "spring", stiffness: 420, damping: 22 }}
+            className={cn(
+              "pointer-events-none absolute z-20 rounded-xl border border-white/20 bg-[#10131f]/95 px-2.5 py-1 text-xs font-bold text-white/90 shadow-lg",
+              crowdShout.side === "left"
+                ? "left-2 sm:left-6"
+                : "right-2 sm:right-6",
+            )}
+            style={{ top: `${crowdShout.top}%` }}
+          >
+            {crowdShout.text}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="relative z-10 flex items-center justify-between px-4 py-3">
         <span className="text-lg font-black uppercase tracking-[0.2em] text-red-400 drop-shadow-[0_0_14px_rgba(248,113,113,0.7)]">
           🔥 Rage Mode
         </span>
         <button
-          onClick={onExit}
+          onClick={beginExit}
           className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-sm text-white hover:bg-white/20"
         >
           Exit ✕
@@ -1123,6 +1226,42 @@ export const RageArena = ({
               </span>
               <span className="text-sm uppercase tracking-[0.35em] text-white/70">
                 Fight!
+              </span>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Leaving — curtains close back over the ring before we drop to the table */}
+      <AnimatePresence>
+        {exiting && (
+          <motion.div
+            className="absolute inset-0 z-[70] flex items-center justify-center"
+            initial={{ opacity: 1 }}
+          >
+            <motion.div
+              initial={{ x: "-100%" }}
+              animate={{ x: 0 }}
+              transition={{ duration: 0.7, ease: [0.7, 0, 0.3, 1] }}
+              className="absolute inset-y-0 left-0 w-1/2 border-r-2 border-red-700/40 bg-[linear-gradient(90deg,#0a0610,#1a0a12)] shadow-[inset_-20px_0_40px_rgba(0,0,0,0.6)]"
+            />
+            <motion.div
+              initial={{ x: "100%" }}
+              animate={{ x: 0 }}
+              transition={{ duration: 0.7, ease: [0.7, 0, 0.3, 1] }}
+              className="absolute inset-y-0 right-0 w-1/2 border-l-2 border-red-700/40 bg-[linear-gradient(270deg,#0a0610,#1a0a12)] shadow-[inset_20px_0_40px_rgba(0,0,0,0.6)]"
+            />
+            <motion.div
+              initial={{ scale: 0.6, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ delay: 0.45, type: "spring", stiffness: 300 }}
+              className="z-10 flex flex-col items-center gap-1"
+            >
+              <span className="text-4xl font-black uppercase tracking-[0.2em] text-amber-300 drop-shadow-[0_0_24px_rgba(251,191,36,0.7)] sm:text-6xl">
+                🏁 GG
+              </span>
+              <span className="text-sm uppercase tracking-[0.35em] text-white/70">
+                Back to estimating
               </span>
             </motion.div>
           </motion.div>
