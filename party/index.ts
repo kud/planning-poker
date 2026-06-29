@@ -76,6 +76,7 @@ export default class PokerRoom implements Party.Server {
   private connCounts = new Map<string, number>()
   private lastReactionAt = new Map<string, number>()
   private lastRageAt = new Map<string, number>()
+  private lastPokeAt = new Map<string, number>()
 
   constructor(readonly room: Party.Room) {}
 
@@ -312,6 +313,35 @@ export default class PokerRoom implements Party.Server {
             from: clientId,
             name,
             emoji: msg.emoji,
+          } satisfies Message),
+        )
+        return
+      }
+      case "poke-prop": {
+        const validProps: ReadonlySet<string> = new Set([
+          "dealer",
+          "cat",
+          "plant-left",
+          "plant-right",
+        ])
+        if (!validProps.has(msg.prop)) return
+        const now = Date.now()
+        if (now - (this.lastPokeAt.get(sender.id) ?? 0) < 150) return
+        this.lastPokeAt.set(sender.id, now)
+        const name =
+          this.state.participants[clientId]?.name ??
+          this.connToProfile.get(sender.id)?.name ??
+          "Guest"
+        this.room.broadcast(
+          JSON.stringify({
+            type: "prop-poked",
+            from: clientId,
+            name,
+            prop: msg.prop,
+            variant:
+              typeof msg.variant === "string"
+                ? msg.variant.slice(0, 16)
+                : undefined,
           } satisfies Message),
         )
         return

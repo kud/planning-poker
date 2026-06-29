@@ -54,13 +54,16 @@ import { PixelWaiter } from "@/components/pixel-waiter"
 import { PixelPlant } from "@/components/pixel-plant"
 import { ReactionBar } from "@/components/reaction-bar"
 import { FloatingReactions } from "@/components/floating-reactions"
+import { PropPokeBadges } from "@/components/prop-poke-badges"
 import { PresenceToasts } from "@/components/presence-toasts"
 import type {
   Reaction,
   PresenceEvent,
+  PropPoke,
   RagePlayer,
   RageInvite,
 } from "@/hooks/use-party-room"
+import type { PropId } from "@/lib/types"
 import type { MutableRefObject } from "react"
 import {
   isMuted,
@@ -122,6 +125,8 @@ type Props = {
   onDeny?: (clientId: string) => void
   reactions?: Reaction[]
   presenceEvents?: PresenceEvent[]
+  propPokes?: PropPoke[]
+  onPokeProp?: (prop: PropId, variant?: string) => void
 }
 
 export type Announcement = { emoji: string; title: string; sub: string }
@@ -580,6 +585,8 @@ export const RoomView = ({
   onDeny,
   reactions,
   presenceEvents,
+  propPokes,
+  onPokeProp,
 }: Props) => {
   const [themePref, setThemePref] = useState<ThemePref>("system")
   const [systemTheme, setSystemTheme] = useState<Theme>("dark")
@@ -762,6 +769,20 @@ export const RoomView = ({
   const me = state.participants[myId]
   const participants = Object.values(state.participants)
   const others = participants.filter((p) => p.id !== myId)
+
+  // Latest poke on a given prop from *someone else* — drives the remote replay
+  // of its animation (my own click already animated locally).
+  const remotePokeFor = (
+    prop: PropId,
+  ): { id: number; variant?: string } | null => {
+    if (!propPokes) return null
+    for (let i = propPokes.length - 1; i >= 0; i--) {
+      const p = propPokes[i]
+      if (p.prop === prop && p.from !== myId)
+        return { id: p.id, variant: p.variant }
+    }
+    return null
+  }
   const seated = me ? [me, ...others] : others
   const voters = participants.filter((p) => !p.isSpectator)
   const allVoted = voters.length > 0 && voters.every((p) => p.vote !== null)
@@ -1149,10 +1170,23 @@ export const RoomView = ({
               </div>
             )}
           </AnimatePresence>
-          <PixelPet />
+          <PixelPet
+            onPoke={(v) => onPokeProp?.("cat", v)}
+            remotePoke={remotePokeFor("cat")}
+          />
           <PixelWaiter active={coffeeRun} onDone={() => setCoffeeRun(false)} />
-          <PixelPlant className="bottom-4 left-4 hidden opacity-90 md:block" />
-          <PixelPlant className="bottom-4 right-4 hidden opacity-90 md:block" />
+          <PixelPlant
+            prop="plant-left"
+            className="bottom-4 left-4 hidden opacity-90 md:block"
+            onPoke={() => onPokeProp?.("plant-left")}
+            remotePoke={remotePokeFor("plant-left")}
+          />
+          <PixelPlant
+            prop="plant-right"
+            className="bottom-4 right-4 hidden opacity-90 md:block"
+            onPoke={() => onPokeProp?.("plant-right")}
+            remotePoke={remotePokeFor("plant-right")}
+          />
           {/* Mobile — roster grid, no table */}
           <div className="md:hidden w-full max-h-full overflow-y-auto px-4 py-5 flex flex-col items-center gap-6">
             <div
@@ -1230,7 +1264,11 @@ export const RoomView = ({
             className="relative hidden md:block"
             style={{ width: "min(640px, 74vw)", aspectRatio: "640 / 268" }}
           >
-            <PixelDealer announcement={announcement} />
+            <PixelDealer
+              announcement={announcement}
+              onPoke={(v) => onPokeProp?.("dealer", v)}
+              remotePoke={remotePokeFor("dealer")}
+            />
             {/* Felt */}
             <div
               className="absolute inset-0"
@@ -1495,6 +1533,7 @@ export const RoomView = ({
           )}
 
         {reactions && <FloatingReactions reactions={reactions} />}
+        {propPokes && <PropPokeBadges pokes={propPokes} />}
 
         {presenceEvents && (
           <PresenceToasts events={presenceEvents} theme={theme} />

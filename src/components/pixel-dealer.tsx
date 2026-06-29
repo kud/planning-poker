@@ -1,9 +1,12 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import type { Announcement } from "@/components/room-view"
 import { playAhem } from "@/lib/sounds"
+
+// A poke replayed from another player: same id only fires once.
+export type RemotePoke = { id: number; variant?: string } | null
 
 const SMALL_TALK: Announcement[] = [
   {
@@ -179,28 +182,57 @@ export const DealerSprite = () => (
 
 export const PixelDealer = ({
   announcement,
+  onPoke,
+  remotePoke,
 }: {
   announcement: Announcement | null
-}) => <PixelDealerInner announcement={announcement} />
+  onPoke?: (variant?: string) => void
+  remotePoke?: RemotePoke
+}) => (
+  <PixelDealerInner
+    announcement={announcement}
+    onPoke={onPoke}
+    remotePoke={remotePoke}
+  />
+)
 
 const PixelDealerInner = ({
   announcement,
+  onPoke,
+  remotePoke,
 }: {
   announcement: Announcement | null
+  onPoke?: (variant?: string) => void
+  remotePoke?: RemotePoke
 }) => {
   const [chat, setChat] = useState<Announcement | null>(null)
   const lastQuip = useRef(-1)
   const chatTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const speak = () => {
+  // Show a specific quip (so a remote poke makes everyone hear the same line).
+  const quipAt = (index: number) => {
     playAhem()
-    let index = Math.floor(Math.random() * SMALL_TALK.length)
-    if (index === lastQuip.current) index = (index + 1) % SMALL_TALK.length
     lastQuip.current = index
     setChat(SMALL_TALK[index])
     if (chatTimer.current) clearTimeout(chatTimer.current)
     chatTimer.current = setTimeout(() => setChat(null), 3500)
   }
+
+  const speak = () => {
+    let index = Math.floor(Math.random() * SMALL_TALK.length)
+    if (index === lastQuip.current) index = (index + 1) % SMALL_TALK.length
+    quipAt(index)
+    onPoke?.(String(index))
+  }
+
+  // Replay a poke from another player: same quip, no re-broadcast.
+  const lastRemote = useRef(0)
+  useEffect(() => {
+    if (!remotePoke || remotePoke.id === lastRemote.current) return
+    lastRemote.current = remotePoke.id
+    const index = Number(remotePoke.variant)
+    quipAt(Number.isInteger(index) && SMALL_TALK[index] ? index : 0)
+  }, [remotePoke])
 
   const bubble = announcement ?? chat
 
@@ -234,6 +266,7 @@ const PixelDealerInner = ({
         )}
       </AnimatePresence>
       <motion.div
+        data-prop="dealer"
         onClick={speak}
         className="pointer-events-auto cursor-pointer"
         animate={

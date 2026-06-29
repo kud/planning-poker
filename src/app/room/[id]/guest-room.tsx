@@ -77,6 +77,8 @@ const GuestRoomConnected = ({
     status,
     reactions,
     presenceEvents,
+    propPokes,
+    pokeProp,
     react,
     vote,
     reveal,
@@ -226,6 +228,8 @@ const GuestRoomConnected = ({
         onRequestRageRestart={requestRageRestart}
         reactions={reactions}
         presenceEvents={presenceEvents}
+        propPokes={propPokes}
+        onPokeProp={pokeProp}
         onCopyCode={copyCode}
         onCopyLink={copyLink}
         copiedMode={copiedMode}

@@ -184,6 +184,9 @@ export const RageArena = ({
   const spaceDownAt = useRef(0)
   const lastSent = useRef(0)
   const lastHitFrom = useRef<Map<string, number>>(new Map())
+  // When a fighter took a hit → flash + shake their node until this timestamp,
+  // so every point of damage has an unmistakable on-screen cause.
+  const hitFlashUntil = useRef<Map<string, number>>(new Map())
   const bloodId = useRef(0)
 
   const bots = useRef<Bot[]>([])
@@ -484,6 +487,7 @@ export const RageArena = ({
         v.vy += (dy / dist) * force
         v.hp = Math.max(0, v.hp - dmg)
         spawnBlood(v.x, v.y)
+        hitFlashUntil.current.set(meta.id, now + 260)
         if (meta.isMe) playHit()
         // Death is permanent — bodies stay down until the arena restarts.
         if (v.hp <= 0 && v.deadUntil === 0) {
@@ -587,7 +591,11 @@ export const RageArena = ({
             .filter((b) => b.hp > 0 && now < b.punchUntil)
             .map((b) => ({ id: b.id, x: b.x, y: b.y })),
           ...[...ragePlayers.current.entries()]
-            .filter(([, p]) => p.punching && now - p.at < 400)
+            // hp > 0 guards against a dead or just-disconnected opponent whose
+            // last broadcast still said `punching: true` — otherwise their
+            // ghost keeps landing hits for up to 400ms with no living attacker
+            // on screen (the "lost health but nobody hit me" bug).
+            .filter(([, p]) => p.hp > 0 && p.punching && now - p.at < 400)
             .map(([id, p]) => ({ id, x: p.x, y: p.y })),
         ]
 
@@ -725,9 +733,17 @@ export const RageArena = ({
             }
           }
           const isDead = hp <= 0
-          node.style.transform = `translate(${pos.x * rect.width}px, ${pos.y * rect.height}px) translate(-50%, -50%) scale(${isPunching ? 1.25 : 1}) rotate(${isDead ? "90deg" : "0deg"})`
+          const hitFlashing =
+            !isDead && now < (hitFlashUntil.current.get(id) ?? 0)
+          // A quick horizontal jitter sells the impact while the flash is up.
+          const shake = hitFlashing ? Math.sin(now / 18) * 3 : 0
+          node.style.transform = `translate(${pos.x * rect.width + shake}px, ${pos.y * rect.height}px) translate(-50%, -50%) scale(${isPunching ? 1.25 : 1}) rotate(${isDead ? "90deg" : "0deg"})`
           node.style.opacity = isDead ? "0.65" : "1"
-          node.style.filter = isDead ? "grayscale(1) brightness(0.6)" : "none"
+          node.style.filter = isDead
+            ? "grayscale(1) brightness(0.6)"
+            : hitFlashing
+              ? "brightness(1.7) drop-shadow(0 0 8px rgba(239,68,68,0.95))"
+              : "none"
           const fill = hpRefs.current.get(id)
           if (fill) {
             fill.style.width = `${Math.max(0, hp)}%`

@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react"
 import usePartySocket from "partysocket/react"
-import { CardValue, Deck, Message, RoomState } from "@/lib/types"
+import { CardValue, Deck, Message, PropId, RoomState } from "@/lib/types"
 import { freshStats } from "@/lib/session-stats"
 
 export type ConnectionStatus = "connecting" | "connected" | "reconnecting"
@@ -51,8 +51,17 @@ export type PresenceEvent = {
   avatar: string
 }
 
+export type PropPoke = {
+  id: number
+  from: string
+  name: string
+  prop: PropId
+  variant?: string
+}
+
 const REACTION_LIFETIME_MS = 4000
 const PRESENCE_LIFETIME_MS = 4500
+const PROP_POKE_LIFETIME_MS = 2600
 
 const PARTYKIT_HOST =
   process.env.NEXT_PUBLIC_PARTYKIT_HOST ??
@@ -82,6 +91,8 @@ export const usePartyRoom = ({
   const reactionId = useRef(0)
   const [presenceEvents, setPresenceEvents] = useState<PresenceEvent[]>([])
   const presenceId = useRef(0)
+  const [propPokes, setPropPokes] = useState<PropPoke[]>([])
+  const propPokeId = useRef(0)
   const ragePlayers = useRef<Map<string, RagePlayer>>(new Map())
   const [rageInvite, setRageInvite] = useState<RageInvite | null>(null)
   const [rageRestart, setRageRestart] = useState(0)
@@ -119,6 +130,23 @@ export const usePartyRoom = ({
         setTimeout(
           () => setReactions((current) => current.filter((r) => r.id !== id)),
           REACTION_LIFETIME_MS,
+        )
+      }
+      if (msg.type === "prop-poked") {
+        const id = ++propPokeId.current
+        setPropPokes((current) => [
+          ...current,
+          {
+            id,
+            from: msg.from,
+            name: msg.name,
+            prop: msg.prop,
+            variant: msg.variant,
+          },
+        ])
+        setTimeout(
+          () => setPropPokes((current) => current.filter((p) => p.id !== id)),
+          PROP_POKE_LIFETIME_MS,
         )
       }
       if (msg.type === "rage" && msg.from !== clientId) {
@@ -171,6 +199,9 @@ export const usePartyRoom = ({
     reactions,
     presenceEvents,
     react: (emoji: string) => send({ type: "react", emoji }),
+    propPokes,
+    pokeProp: (prop: PropId, variant?: string) =>
+      send({ type: "poke-prop", prop, variant }),
     vote: (value: string) => send({ type: "vote", value }),
     reveal: () => send({ type: "reveal" }),
     reset: () => send({ type: "reset" }),

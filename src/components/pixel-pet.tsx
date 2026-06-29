@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { playPurr, playScamper } from "@/lib/sounds"
+import type { RemotePoke } from "@/components/pixel-dealer"
 
 const PIXEL = 3
 const WALK_SPEED = 6
@@ -91,7 +92,13 @@ const buildStroll = (direction: 1 | -1): Segment[] => {
 
 type Stroll = { direction: 1 | -1; segments: Segment[]; id: number }
 
-export const PixelPet = () => {
+export const PixelPet = ({
+  onPoke,
+  remotePoke,
+}: {
+  onPoke?: (variant?: string) => void
+  remotePoke?: RemotePoke
+} = {}) => {
   const [stroll, setStroll] = useState<Stroll | null>(null)
   const [segIndex, setSegIndex] = useState(0)
   const [frame, setFrame] = useState(0)
@@ -121,8 +128,6 @@ export const PixelPet = () => {
     return () => clearInterval(timer)
   }, [moving, fleeing])
 
-  if (!stroll || !segment) return null
-
   const currentPercent = () => {
     const el = wrapperRef.current
     const parent = el?.offsetParent as HTMLElement | null
@@ -130,10 +135,13 @@ export const PixelPet = () => {
     return (el.offsetLeft / parent.clientWidth) * 100
   }
 
-  const handleClick = () => {
+  // Apply a reaction to wherever the cat currently is — shared by local clicks
+  // and pokes replayed from other players, so everyone sees the cat react.
+  const reactTo = (outcome: "purr" | "flee") => {
+    if (!stroll || !segment) return
     if (segment.kind === "purr" || segment.kind === "flee") return
     const here = currentPercent()
-    if (Math.random() < 2 / 3) {
+    if (outcome === "purr") {
       playPurr()
       const rest = stroll.segments
         .slice(segIndex)
@@ -171,6 +179,28 @@ export const PixelPet = () => {
     }
   }
 
+  // Route a poke from another player through the same reaction. The closure is
+  // held in a ref (synced after each commit) so the effect fires only on a new
+  // poke, not on every render.
+  const reactRef = useRef(reactTo)
+  useEffect(() => {
+    reactRef.current = reactTo
+  })
+  const lastRemote = useRef(0)
+  useEffect(() => {
+    if (!remotePoke || remotePoke.id === lastRemote.current) return
+    lastRemote.current = remotePoke.id
+    reactRef.current(remotePoke.variant === "flee" ? "flee" : "purr")
+  }, [remotePoke])
+
+  if (!stroll || !segment) return null
+
+  const handleClick = () => {
+    const outcome = Math.random() < 2 / 3 ? "purr" : "flee"
+    reactTo(outcome)
+    onPoke?.(outcome)
+  }
+
   const advance = () => {
     if (segIndex + 1 < stroll.segments.length) setSegIndex(segIndex + 1)
     else setStroll(null)
@@ -192,6 +222,7 @@ export const PixelPet = () => {
       onAnimationComplete={advance}
     >
       <div
+        data-prop="cat"
         className="pointer-events-auto cursor-pointer relative"
         onClick={handleClick}
       >

@@ -1,7 +1,8 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
+import type { RemotePoke } from "@/components/pixel-dealer"
 
 const PIXEL = 5
 const BIRD_PIXEL = 4
@@ -198,12 +199,35 @@ const PixelBird = ({ onDone }: { onDone: () => void }) => (
   </motion.div>
 )
 
-export const PixelPlant = ({ className = "" }: { className?: string }) => {
+export const PixelPlant = ({
+  className = "",
+  prop,
+  onPoke,
+  remotePoke,
+}: {
+  className?: string
+  prop?: string
+  onPoke?: () => void
+  remotePoke?: RemotePoke
+}) => {
   const [birds, setBirds] = useState<number[]>([])
   const nextId = useRef(0)
 
   const releaseBird = () =>
     setBirds((current) => [...current, nextId.current++])
+
+  const poke = () => {
+    releaseBird()
+    onPoke?.()
+  }
+
+  // Replay a poke from another player without re-broadcasting it.
+  const lastRemote = useRef(0)
+  useEffect(() => {
+    if (!remotePoke || remotePoke.id === lastRemote.current) return
+    lastRemote.current = remotePoke.id
+    releaseBird()
+  }, [remotePoke])
 
   return (
     <div className={`absolute ${className}`}>
@@ -219,7 +243,8 @@ export const PixelPlant = ({ className = "" }: { className?: string }) => {
       </AnimatePresence>
       <motion.button
         type="button"
-        onClick={releaseBird}
+        data-prop={prop}
+        onClick={poke}
         whileHover={{ rotate: [-2.5, 2.5, -2.5] }}
         whileTap={{ scaleY: 0.86, scaleX: 1.07 }}
         transition={{

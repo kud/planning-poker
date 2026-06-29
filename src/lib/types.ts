@@ -2,6 +2,9 @@ import type { SessionStats } from "./session-stats"
 
 export type CardValue = string
 
+// Clickable ambient props that broadcast "who poked what" to the whole room.
+export type PropId = "dealer" | "cat" | "plant-left" | "plant-right"
+
 export type Card = {
   value: CardValue
   label?: string
@@ -105,6 +108,14 @@ export type Message =
     }
   | { type: "react"; emoji: string }
   | { type: "reaction"; from: string; name: string; emoji: string }
+  | { type: "poke-prop"; prop: PropId; variant?: string }
+  | {
+      type: "prop-poked"
+      from: string
+      name: string
+      prop: PropId
+      variant?: string
+    }
   | {
       type: "presence"
       event: "join" | "leave"
