@@ -9,6 +9,7 @@ import {
   Message,
   PropId,
   RoomState,
+  Snack,
 } from "@/lib/types"
 import { freshStats } from "@/lib/session-stats"
 
@@ -102,6 +103,11 @@ export const usePartyRoom = ({
   const propPokeId = useRef(0)
   const [catStroll, setCatStroll] = useState<CatStroll | null>(null)
   const ragePlayers = useRef<Map<string, RagePlayer>>(new Map())
+  // Ref-backed queues drained by the arena each frame (like `ragePlayers`) —
+  // incoming spawns and eaten-claims. Capped so they can't grow unbounded when
+  // no arena is mounted to drain them.
+  const snackDrops = useRef<Snack[]>([])
+  const snackEats = useRef<{ id: string; by: string }[]>([])
   const [rageInvite, setRageInvite] = useState<RageInvite | null>(null)
   const [rageRestart, setRageRestart] = useState(0)
 
@@ -176,8 +182,19 @@ export const usePartyRoom = ({
           name: msg.name,
         })
       }
+      if (msg.type === "snack-dropped") {
+        snackDrops.current = [...snackDrops.current, msg.snack].slice(-60)
+      }
+      if (msg.type === "snack-eaten") {
+        snackEats.current = [
+          ...snackEats.current,
+          { id: msg.id, by: msg.by },
+        ].slice(-120)
+      }
       if (msg.type === "rage-restarted") {
         ragePlayers.current.clear()
+        snackDrops.current = []
+        snackEats.current = []
         setRageRestart((n) => n + 1)
       }
       if (msg.type === "presence" && msg.clientId !== clientId) {
@@ -250,6 +267,10 @@ export const usePartyRoom = ({
     inviteToRage: () => send({ type: "rage-invite" }),
     sendRageMove: (x: number, y: number, punching: boolean, hp: number) =>
       send({ type: "rage-move", x, y, punching, hp }),
+    dropSnack: (snack: Snack) => send({ type: "snack-drop", snack }),
+    eatSnack: (id: string) => send({ type: "snack-eat", id }),
+    snackDrops,
+    snackEats,
     ragePlayers,
     rageInvite,
     dismissRageInvite: () => setRageInvite(null),

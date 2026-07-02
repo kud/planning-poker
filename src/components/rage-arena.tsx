@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type MutableRefObject } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Participant } from "@/lib/types"
+import { Participant, Snack } from "@/lib/types"
 import type { RagePlayer } from "@/hooks/use-party-room"
 import { avatarUrl } from "@/lib/avatar"
 import { cn } from "@/lib/utils"
@@ -22,6 +22,12 @@ type Props = {
   participants: Record<string, Participant>
   ragePlayers: MutableRefObject<Map<string, RagePlayer>>
   onMove: (x: number, y: number, punching: boolean, hp: number) => void
+  // Snack sync: the elected spawner drops food for everyone; any fighter claims
+  // one on pickup. `snackDrops`/`snackEats` are ref-backed inboxes the loop drains.
+  onDropSnack: (snack: Snack) => void
+  onEatSnack: (id: string) => void
+  snackDrops: MutableRefObject<Snack[]>
+  snackEats: MutableRefObject<{ id: string; by: string }[]>
   onExit: () => void
   restartSignal: number
   onRequestRestart?: () => void
@@ -174,6 +180,10 @@ export const RageArena = ({
   participants,
   ragePlayers,
   onMove,
+  onDropSnack,
+  onEatSnack,
+  snackDrops,
+  snackEats,
   onExit,
   restartSignal,
   onRequestRestart,
@@ -224,15 +234,7 @@ export const RageArena = ({
   const [bloods, setBloods] = useState<Blood[]>([])
   const [pools, setPools] = useState<{ id: number; x: number; y: number }[]>([])
   const projId = useRef(0)
-  const [litter, setLitter] = useState<
-    {
-      id: number
-      emoji: string
-      side: "left" | "right"
-      x: number
-      y: number
-    }[]
-  >([])
+  const [litter, setLitter] = useState<Snack[]>([])
   const [quip, setQuip] = useState<string | null>(null)
   const [crowdShout, setCrowdShout] = useState<{
     id: number
@@ -246,6 +248,19 @@ export const RageArena = ({
   const cleaningRef = useRef(false)
   const debrisRef = useRef(0)
   const litterRef = useRef<typeof litter>([])
+  // Am I the elected snack spawner (lowest clientId among current brawlers)?
+  const spawnHostRef = useRef(true)
+  // Snacks I've optimistically eaten but the server hasn't confirmed yet →
+  // the exact HP I gained per snack, so a lost race can be revoked precisely.
+  const pendingHeal = useRef<Map<string, number>>(new Map())
+  // The snack callbacks get a fresh identity every render; keep them in refs so
+  // the ambient timers and rAF loop don't tear down and restart each render.
+  const onDropSnackRef = useRef(onDropSnack)
+  const onEatSnackRef = useRef(onEatSnack)
+  useEffect(() => {
+    onDropSnackRef.current = onDropSnack
+    onEatSnackRef.current = onEatSnack
+  })
   const killsRef = useRef<Map<string, number>>(new Map())
   const winnerRef = useRef(false)
   const [leaderboard, setLeaderboard] = useState<
@@ -266,6 +281,7 @@ export const RageArena = ({
     chairMineRef.current = false
     setChairHeldByMe(false)
     lastHitFrom.current.clear()
+    pendingHeal.current.clear()
     killsRef.current.clear()
     winnerRef.current = false
     setLeaderboard([])
@@ -335,7 +351,9 @@ export const RageArena = ({
   }, [scheme])
 
   useEffect(() => {
-    debrisRef.current = litter.length + pools.length
+    // Snacks are shared state now, so the janitor no longer wipes them (that
+    // would desync clients) — only local blood pools count toward his call-out.
+    debrisRef.current = pools.length
     litterRef.current = litter
   }, [litter, pools])
 
@@ -352,9 +370,9 @@ export const RageArena = ({
       if (cleaningRef.current || debrisRef.current < 10) return
       cleaningRef.current = true
       setCleaning(true)
-      // Floor wiped once he's swept the whole stage…
+      // Floor wiped once he's swept the whole stage — blood only; shared snacks
+      // are left to be eaten or aged out so every client stays in agreement.
       setTimeout(() => {
-        setLitter([])
         setPools([])
       }, 9000)
       // …then he walks out the top-right corner and we unmount him.
@@ -406,7 +424,12 @@ export const RageArena = ({
       const live = [...ragePlayers.current.entries()]
         .filter(([id, p]) => now - p.at < STALE_MS && participants[id])
         .map(([id]) => id)
-      setBrawlers([myId, ...live.filter((id) => id !== myId)])
+      const roster = [myId, ...live.filter((id) => id !== myId)]
+      setBrawlers(roster)
+      // Deterministic spawn authority: the lowest clientId in the ring drops
+      // snacks for everyone. Every client agrees on it from the same roster, so
+      // exactly one spawns (self-healing as fighters join or leave).
+      spawnHostRef.current = roster.every((id) => myId <= id)
     }
     const interval = setInterval(tick, 400)
     tick()
@@ -422,22 +445,22 @@ export const RageArena = ({
     }, 4200)
     const snacks = ["🍺", "🍟", "🍿", "🥤", "🌭", "🍅", "🥨"]
     const toss = setInterval(() => {
+      // Only the elected spawner drops food; it broadcasts so every ring shows
+      // the same snack at the same spot (id scoped by clientId to stay unique).
+      if (!spawnHostRef.current) return
       const side: "left" | "right" = Math.random() < 0.5 ? "left" : "right"
-      setLitter((prev) =>
-        [
-          ...prev,
-          {
-            id: ++projId.current,
-            emoji: snacks[Math.floor(Math.random() * snacks.length)],
-            side,
-            x:
-              side === "left"
-                ? 0.2 + Math.random() * 0.28
-                : 0.52 + Math.random() * 0.28,
-            y: 0.38 + Math.random() * 0.3,
-          },
-        ].slice(-24),
-      )
+      const snack: Snack = {
+        id: `${myId}#${++projId.current}`,
+        emoji: snacks[Math.floor(Math.random() * snacks.length)],
+        side,
+        x:
+          side === "left"
+            ? 0.2 + Math.random() * 0.28
+            : 0.52 + Math.random() * 0.28,
+        y: 0.38 + Math.random() * 0.3,
+      }
+      setLitter((prev) => [...prev, snack].slice(-24))
+      onDropSnackRef.current(snack)
     }, 2300)
     let shoutId = 0
     const shout = setInterval(() => {
@@ -505,6 +528,31 @@ export const RageArena = ({
     const loop = () => {
       const m = me.current
       const now = Date.now()
+
+      // --- drain shared snack events (spawns + adjudicated pickups) ---
+      if (snackDrops.current.length) {
+        const incoming = snackDrops.current
+        snackDrops.current = []
+        const have = new Set(litterRef.current.map((l) => l.id))
+        const add = incoming.filter((s) => !have.has(s.id))
+        if (add.length) {
+          litterRef.current = [...litterRef.current, ...add].slice(-24)
+          setLitter(litterRef.current)
+        }
+      }
+      if (snackEats.current.length) {
+        const eats = snackEats.current
+        snackEats.current = []
+        for (const { id, by } of eats) {
+          const applied = pendingHeal.current.get(id)
+          // I optimistically healed off this snack but lost the race → give it back.
+          if (applied != null && by !== myId) m.hp = Math.max(0, m.hp - applied)
+          pendingHeal.current.delete(id)
+        }
+        const gone = new Set(eats.map((e) => e.id))
+        litterRef.current = litterRef.current.filter((l) => !gone.has(l.id))
+        setLitter(litterRef.current)
+      }
 
       const spawnBlood = (x: number, y: number, amount = 7) =>
         setBloods((prev) =>
@@ -607,12 +655,21 @@ export const RageArena = ({
       const mePunching = m.hp > 0 && now < punchUntil.current
 
       // --- snack pickup: walk over floor food to recover a little health ---
+      // Optimistic — heal + hide immediately, then claim it. The server names
+      // the one true eater via `snack-eaten`; if another fighter beat us to it,
+      // the drain above revokes the heal. Guarding on the local field alone
+      // would let two players both "eat" the same snack.
       if (!intro && m.hp > 0 && m.hp < 100 && litterRef.current.length) {
         const eaten = litterRef.current.filter(
           (l) => Math.hypot(l.x - m.x, l.y - m.y) < SNACK_PICKUP,
         )
         if (eaten.length) {
-          m.hp = Math.min(100, m.hp + eaten.length * SNACK_HEAL)
+          for (const s of eaten) {
+            const applied = Math.min(100, m.hp + SNACK_HEAL) - m.hp
+            m.hp += applied
+            pendingHeal.current.set(s.id, applied)
+            onEatSnackRef.current(s.id)
+          }
           healFlashUntil.current = now + 320
           const ids = new Set(eaten.map((e) => e.id))
           litterRef.current = litterRef.current.filter((l) => !ids.has(l.id))
@@ -855,7 +912,7 @@ export const RageArena = ({
     }
     raf = requestAnimationFrame(loop)
     return () => cancelAnimationFrame(raf)
-  }, [myId, onMove, ragePlayers, intro])
+  }, [myId, onMove, ragePlayers, snackDrops, snackEats, intro])
 
   const onPointer = (e: React.PointerEvent) => {
     const rect = containerRef.current?.getBoundingClientRect()

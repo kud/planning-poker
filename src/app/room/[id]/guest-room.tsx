@@ -105,6 +105,10 @@ const GuestRoomConnected = ({
     deny,
     setRage,
     sendRageMove,
+    dropSnack,
+    eatSnack,
+    snackDrops,
+    snackEats,
     inviteToRage,
     ragePlayers,
     rageInvite,
@@ -222,6 +226,10 @@ const GuestRoomConnected = ({
         onDeny={deny}
         onSetRage={setRage}
         onRageMove={sendRageMove}
+        onDropSnack={dropSnack}
+        onEatSnack={eatSnack}
+        snackDrops={snackDrops}
+        snackEats={snackEats}
         onInviteRage={inviteToRage}
         ragePlayers={ragePlayers}
         rageInvite={rageInvite}

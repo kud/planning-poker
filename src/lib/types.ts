@@ -18,6 +18,17 @@ export type CatStroll = {
   segments: CatSegment[]
 }
 
+// Rage-arena floor snacks. Spawned by one elected brawler and broadcast so
+// every fighter sees the same food at the same spot and races for it — the
+// `id` is scoped by spawner (`${clientId}#${seq}`) to stay globally unique.
+export type Snack = {
+  id: string
+  emoji: string
+  side: "left" | "right"
+  x: number
+  y: number
+}
+
 export type Card = {
   value: CardValue
   label?: string
@@ -123,6 +134,13 @@ export type Message =
   | { type: "reaction"; from: string; name: string; emoji: string }
   | { type: "cat-stroll"; stroll: CatStroll }
   | { type: "cat-strolled"; stroll: CatStroll }
+  // Elected brawler drops a snack; server relays it to the rest of the ring.
+  | { type: "snack-drop"; snack: Snack }
+  | { type: "snack-dropped"; snack: Snack }
+  // Anyone claims a snack on pickup; server adjudicates first-come and tells
+  // everyone who actually got it (`by`) so losers can revoke their optimistic heal.
+  | { type: "snack-eat"; id: string }
+  | { type: "snack-eaten"; id: string; by: string }
   | { type: "poke-prop"; prop: PropId; variant?: string }
   | {
       type: "prop-poked"

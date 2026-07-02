@@ -1,5 +1,11 @@
 import type * as Party from "partykit/server"
-import type { Deck, HistoryEntry, Message, RoomState } from "../src/lib/types"
+import type {
+  Deck,
+  HistoryEntry,
+  Message,
+  RoomState,
+  Snack,
+} from "../src/lib/types"
 import { freshStats, recordReveal } from "../src/lib/session-stats"
 
 const defaultDeck = (): Deck => ({
@@ -77,6 +83,11 @@ export default class PokerRoom implements Party.Server {
   private lastReactionAt = new Map<string, number>()
   private lastRageAt = new Map<string, number>()
   private lastPokeAt = new Map<string, number>()
+  private lastSnackDropAt = new Map<string, number>()
+  private lastSnackEatAt = new Map<string, number>()
+  // Snack ids already claimed this brawl — the referee for pickup races. Reset
+  // whenever the arena resets (rage toggled off or restarted).
+  private eatenSnacks = new Set<string>()
 
   constructor(readonly room: Party.Room) {}
 
@@ -365,6 +376,40 @@ export default class PokerRoom implements Party.Server {
         )
         return
       }
+      case "snack-drop": {
+        // Only relayed while the ring is open; sender already has it locally.
+        if (!this.state.rageEnabled) return
+        const snack = this.sanitizeSnack(msg.snack)
+        if (!snack) return
+        const now = Date.now()
+        if (now - (this.lastSnackDropAt.get(sender.id) ?? 0) < 400) return
+        this.lastSnackDropAt.set(sender.id, now)
+        this.room.broadcast(
+          JSON.stringify({ type: "snack-dropped", snack } satisfies Message),
+          [sender.id],
+        )
+        return
+      }
+      case "snack-eat": {
+        if (!this.state.rageEnabled) return
+        if (typeof msg.id !== "string" || msg.id.length > 64) return
+        const now = Date.now()
+        if (now - (this.lastSnackEatAt.get(sender.id) ?? 0) < 40) return
+        this.lastSnackEatAt.set(sender.id, now)
+        // First claim wins; later claims for the same snack are dropped so only
+        // one fighter is ever told they ate it.
+        if (this.eatenSnacks.has(msg.id)) return
+        if (this.eatenSnacks.size > 4096) this.eatenSnacks.clear()
+        this.eatenSnacks.add(msg.id)
+        this.room.broadcast(
+          JSON.stringify({
+            type: "snack-eaten",
+            id: msg.id,
+            by: clientId,
+          } satisfies Message),
+        )
+        return
+      }
       case "set-deck": {
         if (!isHost) return
         if (!validDeck(msg.deck)) return
@@ -623,10 +668,12 @@ export default class PokerRoom implements Party.Server {
       case "set-rage": {
         if (!isHost) return
         this.state = { ...this.state, rageEnabled: !!msg.enabled }
+        this.eatenSnacks.clear()
         break
       }
       case "rage-restart": {
         if (!isHost || !this.state.rageEnabled) return
+        this.eatenSnacks.clear()
         this.room.broadcast(
           JSON.stringify({ type: "rage-restarted" } satisfies Message),
         )
@@ -755,6 +802,29 @@ export default class PokerRoom implements Party.Server {
           { ...p, vote: null },
         ]),
       ),
+    }
+  }
+
+  private sanitizeSnack(value: unknown): Snack | null {
+    if (!value || typeof value !== "object") return null
+    const s = value as Snack
+    if (typeof s.id !== "string" || s.id.length === 0 || s.id.length > 64)
+      return null
+    if (typeof s.emoji !== "string" || s.emoji.length > 8) return null
+    if (s.side !== "left" && s.side !== "right") return null
+    if (
+      typeof s.x !== "number" ||
+      typeof s.y !== "number" ||
+      !Number.isFinite(s.x) ||
+      !Number.isFinite(s.y)
+    )
+      return null
+    return {
+      id: s.id,
+      emoji: s.emoji,
+      side: s.side,
+      x: Math.max(0, Math.min(1, s.x)),
+      y: Math.max(0, Math.min(1, s.y)),
     }
   }
 

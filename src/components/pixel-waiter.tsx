@@ -9,7 +9,9 @@ const PIXEL = 5
 const WALK_SPEED = 14
 const PAUSE_SECONDS = 2.4
 const FRAME_MS = 140
-const STOP_AT = 36
+// Stop at the table's near-left edge, not its centre — keeps his speech
+// bubble clear of the centred vote result on the felt.
+const STOP_AT = 16
 
 const SKIN = "#e8b88a"
 const HAIR = "#1c1917"
@@ -143,7 +145,9 @@ export const PixelWaiter = ({
 
   return (
     <motion.div
-      className="absolute bottom-[6%] z-20 hidden md:block pointer-events-none"
+      // z-[5]: above the felt (z-auto) but below the centred result (z-10),
+      // so the tray/bubble never overlaps the vote stats.
+      className="absolute bottom-[6%] z-[5] hidden md:block pointer-events-none"
       initial={{ left: "-8%" }}
       animate={{ left: `${target}%` }}
       transition={{ duration, ease: "linear" }}

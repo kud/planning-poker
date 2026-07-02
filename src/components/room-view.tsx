@@ -63,7 +63,7 @@ import type {
   RagePlayer,
   RageInvite,
 } from "@/hooks/use-party-room"
-import type { CatStroll, PropId } from "@/lib/types"
+import type { CatStroll, PropId, Snack } from "@/lib/types"
 import type { MutableRefObject } from "react"
 import {
   isMuted,
@@ -110,6 +110,10 @@ type Props = {
   onClearTimer?: () => void
   onSetRage?: (enabled: boolean) => void
   onRageMove?: (x: number, y: number, punching: boolean, hp: number) => void
+  onDropSnack?: (snack: Snack) => void
+  onEatSnack?: (id: string) => void
+  snackDrops?: MutableRefObject<Snack[]>
+  snackEats?: MutableRefObject<{ id: string; by: string }[]>
   onInviteRage?: () => void
   ragePlayers?: MutableRefObject<Map<string, RagePlayer>>
   rageInvite?: RageInvite | null
@@ -572,6 +576,10 @@ export const RoomView = ({
   onClearTimer,
   onSetRage,
   onRageMove,
+  onDropSnack,
+  onEatSnack,
+  snackDrops,
+  snackEats,
   onInviteRage,
   ragePlayers,
   rageInvite,
@@ -1552,18 +1560,29 @@ export const RoomView = ({
           <PresenceToasts events={presenceEvents} theme={theme} />
         )}
 
-        {rageActive && state.rageEnabled && onRageMove && ragePlayers && (
-          <RageArena
-            myId={myId}
-            isHost={isHost}
-            participants={state.participants}
-            ragePlayers={ragePlayers}
-            onMove={onRageMove}
-            onExit={() => setRageActive(false)}
-            restartSignal={rageRestart ?? 0}
-            onRequestRestart={onRequestRageRestart}
-          />
-        )}
+        {rageActive &&
+          state.rageEnabled &&
+          onRageMove &&
+          ragePlayers &&
+          onDropSnack &&
+          onEatSnack &&
+          snackDrops &&
+          snackEats && (
+            <RageArena
+              myId={myId}
+              isHost={isHost}
+              participants={state.participants}
+              ragePlayers={ragePlayers}
+              onMove={onRageMove}
+              onDropSnack={onDropSnack}
+              onEatSnack={onEatSnack}
+              snackDrops={snackDrops}
+              snackEats={snackEats}
+              onExit={() => setRageActive(false)}
+              restartSignal={rageRestart ?? 0}
+              onRequestRestart={onRequestRageRestart}
+            />
+          )}
 
         <AnimatePresence>
           {state.break && onVoteBreak && onSetBreakTime && onEndBreak && (
