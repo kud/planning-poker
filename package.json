@@ -2,7 +2,7 @@
   "name": "planning-poker",
   "version": "1.0.2",
   "license": "MIT",
-  "homepage": "https://planningdeck.vercel.app",
+  "homepage": "https://planning-poker.beansontoast.app",
   "private": true,
   "scripts": {
     "dev": "next dev",

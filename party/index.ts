@@ -100,7 +100,7 @@ export default class PokerRoom implements Party.Server {
   }
 
   onRequest() {
-    return Response.redirect("https://planningdeck.vercel.app", 302)
+    return Response.redirect("https://planning-poker.beansontoast.app", 302)
   }
 
   private scheduleCleanup() {
