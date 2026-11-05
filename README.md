@@ -142,9 +142,7 @@ src/
 ### Configuration
 
 The client connects to `NEXT_PUBLIC_PARTYKIT_HOST` when set, and falls back to
-`127.0.0.1:8787` (the local `wrangler dev` port). When deploying the Next.js
-app — e.g. to Vercel — set `NEXT_PUBLIC_PARTYKIT_HOST` to the host of the
-deployed room server, e.g. `planning-poker.example.workers.dev`.
+`127.0.0.1:8787` in development and `planning-poker.kud-space.workers.dev` in production builds.
 
 ---
 
