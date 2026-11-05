@@ -46,6 +46,7 @@ export type Participant = {
   name: string
   avatar: string
   vote: CardValue | null
+  voteRevision?: number
   isHost: boolean
   isSpectator?: boolean
 }

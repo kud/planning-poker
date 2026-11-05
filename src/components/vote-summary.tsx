@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { motion, AnimatePresence, animate } from "framer-motion"
 import { Participant } from "@/lib/types"
 import { computeVoteStats } from "@/lib/vote-stats"
+import { VOTE_MASK } from "@/lib/constants"
 
 const CountUp = ({ value }: { value: number }) => {
   const [display, setDisplay] = useState(0)
@@ -80,7 +81,7 @@ export const VoteSummary = ({
   const spreadColor = dark ? "text-amber-300" : "text-amber-600"
   const avgColor = dark ? "text-indigo-300" : "text-indigo-600"
   const votes = Object.values(participants)
-    .filter((p) => p.vote !== null)
+    .filter((p) => p.vote !== null && p.vote !== VOTE_MASK)
     .map((p) => p.vote!)
 
   const stats = computeVoteStats(votes)

@@ -23,6 +23,7 @@ export const TableCard = ({
   dealFrom,
 }: Props) => {
   const showValue = revealed && participant.vote !== null
+  const voteRevision = participant.voteRevision ?? 0
   const origin = dealFrom ?? { x: 0, y: 14 }
   // Before the reveal each card waits in front of its owner; on reveal every
   // card glides to its spot on the felt (and flips), so the cards visibly come
@@ -32,19 +33,18 @@ export const TableCard = ({
   // Pop + wiggle the card whenever its owner changes their pick (pre-reveal the
   // face is hidden, so this is the only cue that their vote actually swapped).
   const swap = useAnimationControls()
-  const prevVote = useRef(participant.vote)
+  const prevRevision = useRef(voteRevision)
   useEffect(() => {
-    if (participant.vote !== prevVote.current) {
-      const changed = prevVote.current !== null && participant.vote !== null
-      prevVote.current = participant.vote
-      if (changed && !revealed)
+    if (voteRevision !== prevRevision.current) {
+      prevRevision.current = voteRevision
+      if (!revealed)
         swap.start({
           scale: [1, 1.28, 0.92, 1],
           rotate: [0, -10, 8, 0],
           transition: { duration: 0.5, ease: "easeOut" },
         })
     }
-  }, [participant.vote, revealed, swap])
+  }, [voteRevision, revealed, swap])
 
   return (
     <motion.div
@@ -85,7 +85,7 @@ export const TableCard = ({
             className="absolute inset-0 rounded-lg border-2 border-primary bg-[#fffdf7] shadow-[0_0_18px_rgba(99,102,241,0.5)] flex items-center justify-center"
           >
             <span className="text-lg sm:text-xl font-bold text-slate-800">
-              {participant.vote}
+              {showValue ? participant.vote : null}
             </span>
           </div>
           <div

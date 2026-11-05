@@ -46,6 +46,7 @@ import { RageArena } from "@/components/rage-arena"
 import { BreakOverlay } from "@/components/break-overlay"
 import { Deck, RoomState } from "@/lib/types"
 import { computeVoteStats } from "@/lib/vote-stats"
+import { VOTE_MASK } from "@/lib/constants"
 import { SettingsDialog } from "@/components/settings-dialog"
 import { OnboardingHints } from "@/components/onboarding-hints"
 import { PixelPet } from "@/components/pixel-pet"
@@ -636,7 +637,7 @@ export const RoomView = ({
   useEffect(() => {
     latestVotes.current = Object.values(state.participants)
       .map((p) => p.vote)
-      .filter((v): v is string => v !== null)
+      .filter((v): v is string => v !== null && v !== VOTE_MASK)
   })
 
   useEffect(() => {
@@ -812,7 +813,7 @@ export const RoomView = ({
   const reduceMotion = useReducedMotion()
   const votes = participants
     .map((p) => p.vote)
-    .filter((v): v is string => Boolean(v))
+    .filter((v): v is string => Boolean(v) && v !== VOTE_MASK)
   const stats = computeVoteStats(votes)
   const isConsensus = stats.consensus
   const suggestedEstimate =

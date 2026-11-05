@@ -7,6 +7,7 @@ import type {
   Snack,
 } from "../src/lib/types"
 import { freshStats, recordReveal } from "../src/lib/session-stats"
+import { projectState } from "./project-state"
 
 const defaultDeck = (): Deck => ({
   preset: "fibonacci",
@@ -232,13 +233,17 @@ export default class PokerRoom implements Party.Server {
         if (!this.deckValues().has(msg.value)) return
         this.ensureParticipant(clientId, sender.id)
         if (this.state.participants[clientId].isSpectator) return
+        const participant = this.state.participants[clientId]
+        const isRevoting =
+          participant.vote !== null && participant.vote !== msg.value
         this.state = {
           ...this.state,
           participants: {
             ...this.state.participants,
             [clientId]: {
-              ...this.state.participants[clientId],
+              ...participant,
               vote: msg.value,
+              voteRevision: (participant.voteRevision ?? 0) + (isRevoting ? 1 : 0),
             },
           },
         }
@@ -277,7 +282,7 @@ export default class PokerRoom implements Party.Server {
         break
       }
       case "roll-speaker": {
-        if (!isHost) return
+        if (!isHost || !this.state.revealed) return
         const ids = Object.keys(this.state.participants).filter(
           (id) => !this.state.participants[id].isSpectator,
         )
@@ -850,8 +855,12 @@ export default class PokerRoom implements Party.Server {
 
   private broadcastState() {
     this.persist()
-    this.room.broadcast(
-      JSON.stringify({ type: "state", state: this.state } satisfies Message),
-    )
+    for (const conn of this.room.getConnections()) {
+      const clientId = this.connToClientId.get(conn.id)
+      const projected = projectState(this.state, clientId)
+      conn.send(
+        JSON.stringify({ type: "state", state: projected } satisfies Message),
+      )
+    }
   }
 }
