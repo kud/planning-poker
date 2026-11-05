@@ -71,11 +71,7 @@ const REACTION_LIFETIME_MS = 4000
 const PRESENCE_LIFETIME_MS = 4500
 const PROP_POKE_LIFETIME_MS = 2600
 
-const PARTYKIT_HOST =
-  process.env.NEXT_PUBLIC_PARTYKIT_HOST ??
-  (process.env.NODE_ENV === "development"
-    ? "127.0.0.1:1999"
-    : "planning-poker.kud.partykit.dev")
+const PARTYKIT_HOST = process.env.NEXT_PUBLIC_PARTYKIT_HOST ?? "127.0.0.1:8787"
 
 type Options = {
   roomId: string

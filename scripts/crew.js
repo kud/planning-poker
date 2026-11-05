@@ -2,7 +2,7 @@
 //
 //   npm run crew -- ROOMCODE              7 users on the local dev server
 //   npm run crew -- ROOMCODE --count 3    3 users
-//   npm run crew -- ROOMCODE --prod       against the deployed PartyKit server
+//   npm run crew -- ROOMCODE --prod       against the deployed Workers server
 //
 // The crew votes shortly after joining and re-votes after every new round.
 // Stops after 15 minutes or on Ctrl-C.
@@ -18,9 +18,17 @@ const prod = args.includes("--prod")
 const countIndex = args.indexOf("--count")
 const count = countIndex === -1 ? 7 : Number(args[countIndex + 1]) || 7
 
-const host = prod
-  ? "wss://planning-poker.kud.partykit.dev"
-  : "ws://127.0.0.1:1999"
+let host = "ws://127.0.0.1:8787"
+if (prod) {
+  const deployedHost = process.env.NEXT_PUBLIC_PARTYKIT_HOST
+  if (!deployedHost) {
+    console.error(
+      "No --prod host: set NEXT_PUBLIC_PARTYKIT_HOST to the deployed room server's host (e.g. planning-poker.example.workers.dev).",
+    )
+    process.exit(1)
+  }
+  host = `wss://${deployedHost}`
+}
 const NAMES = ["Alice", "Bob", "Chloe", "Dan", "Eve", "Farouk", "Grace", "Hugo"]
 const VALUES = ["1", "2", "3", "5", "8", "13"]
 

@@ -1,0 +1,9 @@
+{
+  "name": "planning-poker",
+  "main": "party/index.ts",
+  "compatibility_date": "2026-06-12",
+  "durable_objects": {
+    "bindings": [{ "name": "Main", "class_name": "PokerRoom" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["PokerRoom"] }]
+}

@@ -1,4 +1,10 @@
-import type * as Party from "partykit/server"
+import {
+  routePartykitRequest,
+  Server,
+  type Connection,
+  type ConnectionContext,
+  type WSMessage,
+} from "partyserver"
 import type {
   Deck,
   HistoryEntry,
@@ -7,6 +13,11 @@ import type {
   Snack,
 } from "../src/lib/types"
 import { freshStats, recordReveal } from "../src/lib/session-stats"
+import {
+  MAX_TEXT_LEN,
+  clampConnectionUrl,
+  parseConnectionParams,
+} from "./connection-params"
 import { projectState } from "./project-state"
 
 const defaultDeck = (): Deck => ({
@@ -39,8 +50,16 @@ const uniqueName = (
 
 type PersistedData = { state: RoomState; hostSecret: string | null }
 
+// Per-connection data kept in the WebSocket attachment so it survives
+// hibernation wake-ups. The room itself lives in ctx.storage via `persist()`.
+type ConnState = {
+  clientId: string
+  secret: string
+  name: string
+  avatar: string
+}
+
 const ROOM_TTL_MS = 24 * 60 * 60 * 1000
-const MAX_TEXT_LEN = 120
 const MAX_HISTORY = 200
 
 const freshState = (): RoomState => ({
@@ -74,26 +93,25 @@ const validDeck = (deck: unknown): deck is Deck => {
   )
 }
 
-export default class PokerRoom implements Party.Server {
+export class PokerRoom extends Server {
+  static options = { hibernate: true }
+
   private state: RoomState = freshState()
   private hostSecret: string | null = null
-  private connToClientId = new Map<string, string>()
-  private connToSecret = new Map<string, string>()
-  private connToProfile = new Map<string, { name: string; avatar: string }>()
-  private connCounts = new Map<string, number>()
   private lastReactionAt = new Map<string, number>()
   private lastRageAt = new Map<string, number>()
   private lastPokeAt = new Map<string, number>()
   private lastSnackDropAt = new Map<string, number>()
   private lastSnackEatAt = new Map<string, number>()
   // Snack ids already claimed this brawl — the referee for pickup races. Reset
-  // whenever the arena resets (rage toggled off or restarted).
+  // whenever the arena resets (rage toggled off or restarted). Held in memory:
+  // losing it to hibernation only risks a double-eat, never room state.
   private eatenSnacks = new Set<string>()
 
-  constructor(readonly room: Party.Room) {}
-
+  // Runs on every wake-up (new or evicted instance), reloading the room from
+  // storage; every state change went through persist() when it was broadcast.
   async onStart() {
-    const saved = await this.room.storage.get<PersistedData>("room")
+    const saved = await this.ctx.storage.get<PersistedData>("room")
     if (saved) {
       this.state = { ...freshState(), ...saved.state }
       this.hostSecret = saved.hostSecret
@@ -105,38 +123,51 @@ export default class PokerRoom implements Party.Server {
   }
 
   private scheduleCleanup() {
-    this.room.storage.setAlarm(Date.now() + ROOM_TTL_MS)
+    this.ctx.storage.setAlarm(Date.now() + ROOM_TTL_MS)
   }
 
   async onAlarm() {
-    const stillConnected = [...this.room.getConnections()].length > 0
+    const stillConnected = [...this.getConnections()].length > 0
     if (stillConnected) {
       this.scheduleCleanup()
       return
     }
-    await this.room.storage.deleteAll()
+    // This storage also holds PartyServer's own name-fallback record, so only
+    // the room snapshot key is cleared rather than everything.
+    await this.ctx.storage.delete("room")
     this.state = freshState()
     this.hostSecret = null
   }
 
-  onConnect(conn: Party.Connection, ctx: Party.ConnectionContext) {
-    const url = new URL(ctx.request.url)
-    const clientId = url.searchParams.get("clientId") ?? conn.id
-    const secret = url.searchParams.get("hostSecret") ?? ""
-    const name = url.searchParams.get("name") ?? "Guest"
-    const avatar = url.searchParams.get("avatar") ?? ""
+  // A client can hold several connections (tabs); the connection being opened
+  // or closed may or may not still be listed by getConnections, so it is
+  // excluded by id either way.
+  private hasOtherLiveConnection(connId: string, clientId: string) {
+    for (const conn of this.getConnections<ConnState>()) {
+      if (conn.id === connId) continue
+      if (conn.state?.clientId === clientId) return true
+    }
+    return false
+  }
 
-    const prevConnCount = this.connCounts.get(clientId) ?? 0
-    this.connToClientId.set(conn.id, clientId)
-    this.connToProfile.set(conn.id, { name, avatar })
-    if (secret) this.connToSecret.set(conn.id, secret)
-    this.connCounts.set(clientId, prevConnCount + 1)
+  onConnect(conn: Connection<ConnState>, ctx: ConnectionContext) {
+    const parsed = parseConnectionParams(new URL(ctx.request.url).searchParams)
+    const clientId = parsed.clientId || conn.id
+
+    // The attachment must be in place before the first broadcast: the vote
+    // mask is projected per connection from state.clientId.
+    conn.setState({
+      clientId,
+      secret: parsed.secret,
+      name: parsed.name,
+      avatar: parsed.avatar,
+    })
     this.scheduleCleanup()
 
-    if (secret && !this.hostSecret) this.hostSecret = secret
-
-    const isHost = !!secret && secret === this.hostSecret
+    if (parsed.secret && !this.hostSecret) this.hostSecret = parsed.secret
+    const isHost = !!parsed.secret && parsed.secret === this.hostSecret
     const existing = this.state.participants[clientId]
+    const isFirstConnection = !this.hasOtherLiveConnection(conn.id, clientId)
 
     // Gate new, non-host joiners into a pending bucket when approval is on.
     // Already-admitted participants (reconnects) are grandfathered through.
@@ -147,11 +178,11 @@ export default class PokerRoom implements Party.Server {
           ...this.state.pending,
           [clientId]: {
             id: clientId,
-            name: uniqueName(name, {
+            name: uniqueName(parsed.name, {
               ...this.state.participants,
               ...this.state.pending,
             }),
-            avatar,
+            avatar: parsed.avatar,
           },
         },
       }
@@ -164,11 +195,11 @@ export default class PokerRoom implements Party.Server {
       participants: {
         ...this.state.participants,
         [clientId]: existing
-          ? { ...existing, avatar, isHost }
+          ? { ...existing, avatar: parsed.avatar, isHost }
           : {
               id: clientId,
-              name: uniqueName(name, this.state.participants),
-              avatar,
+              name: uniqueName(parsed.name, this.state.participants),
+              avatar: parsed.avatar,
               vote: null,
               isHost,
             },
@@ -177,9 +208,9 @@ export default class PokerRoom implements Party.Server {
 
     this.broadcastState()
 
-    if (prevConnCount === 0) {
+    if (isFirstConnection) {
       const joined = this.state.participants[clientId]
-      this.room.broadcast(
+      this.broadcast(
         JSON.stringify({
           type: "presence",
           event: "join",
@@ -191,13 +222,10 @@ export default class PokerRoom implements Party.Server {
     }
   }
 
-  private ensureParticipant(clientId: string, connId: string) {
+  private ensureParticipant(clientId: string, conn: Connection<ConnState>) {
     if (this.state.participants[clientId]) return
-    const profile = this.connToProfile.get(connId) ?? {
-      name: "Guest",
-      avatar: "",
-    }
-    const secret = this.connToSecret.get(connId) ?? ""
+    const profile = conn.state ?? { name: "Guest", avatar: "" }
+    const secret = conn.state?.secret ?? ""
     this.state = {
       ...this.state,
       participants: {
@@ -213,10 +241,16 @@ export default class PokerRoom implements Party.Server {
     }
   }
 
-  onMessage(message: string, sender: Party.Connection) {
-    const msg = JSON.parse(message) as Message
-    const clientId = this.connToClientId.get(sender.id) ?? sender.id
-    const senderSecret = this.connToSecret.get(sender.id) ?? ""
+  onMessage(conn: Connection<ConnState>, message: WSMessage) {
+    if (typeof message !== "string") return
+    let msg: Message
+    try {
+      msg = JSON.parse(message) as Message
+    } catch {
+      return
+    }
+    const clientId = conn.state?.clientId ?? conn.id
+    const senderSecret = conn.state?.secret ?? ""
     const isHost = !!this.hostSecret && senderSecret === this.hostSecret
 
     // A pending (un-admitted) client can't do anything until the host lets it in.
@@ -231,7 +265,7 @@ export default class PokerRoom implements Party.Server {
       case "vote": {
         if (this.state.revealed) return
         if (!this.deckValues().has(msg.value)) return
-        this.ensureParticipant(clientId, sender.id)
+        this.ensureParticipant(clientId, conn)
         if (this.state.participants[clientId].isSpectator) return
         const participant = this.state.participants[clientId]
         const isRevoting =
@@ -251,7 +285,7 @@ export default class PokerRoom implements Party.Server {
         break
       }
       case "update-profile": {
-        this.ensureParticipant(clientId, sender.id)
+        this.ensureParticipant(clientId, conn)
         const excluded = Object.fromEntries(
           Object.entries(this.state.participants).filter(
             ([id]) => id !== clientId,
@@ -317,13 +351,13 @@ export default class PokerRoom implements Party.Server {
       case "react": {
         if (typeof msg.emoji !== "string" || msg.emoji.length > 16) return
         const now = Date.now()
-        if (now - (this.lastReactionAt.get(sender.id) ?? 0) < 250) return
-        this.lastReactionAt.set(sender.id, now)
+        if (now - (this.lastReactionAt.get(conn.id) ?? 0) < 250) return
+        this.lastReactionAt.set(conn.id, now)
         const name =
           this.state.participants[clientId]?.name ??
-          this.connToProfile.get(sender.id)?.name ??
+          conn.state?.name ??
           "Guest"
-        this.room.broadcast(
+        this.broadcast(
           JSON.stringify({
             type: "reaction",
             from: clientId,
@@ -342,13 +376,13 @@ export default class PokerRoom implements Party.Server {
         ])
         if (!validProps.has(msg.prop)) return
         const now = Date.now()
-        if (now - (this.lastPokeAt.get(sender.id) ?? 0) < 150) return
-        this.lastPokeAt.set(sender.id, now)
+        if (now - (this.lastPokeAt.get(conn.id) ?? 0) < 150) return
+        this.lastPokeAt.set(conn.id, now)
         const name =
           this.state.participants[clientId]?.name ??
-          this.connToProfile.get(sender.id)?.name ??
+          conn.state?.name ??
           "Guest"
-        this.room.broadcast(
+        this.broadcast(
           JSON.stringify({
             type: "prop-poked",
             from: clientId,
@@ -375,9 +409,9 @@ export default class PokerRoom implements Party.Server {
           s.segments.length > 24
         )
           return
-        this.room.broadcast(
+        this.broadcast(
           JSON.stringify({ type: "cat-strolled", stroll: s } satisfies Message),
-          [sender.id],
+          [conn.id],
         )
         return
       }
@@ -387,11 +421,11 @@ export default class PokerRoom implements Party.Server {
         const snack = this.sanitizeSnack(msg.snack)
         if (!snack) return
         const now = Date.now()
-        if (now - (this.lastSnackDropAt.get(sender.id) ?? 0) < 400) return
-        this.lastSnackDropAt.set(sender.id, now)
-        this.room.broadcast(
+        if (now - (this.lastSnackDropAt.get(conn.id) ?? 0) < 400) return
+        this.lastSnackDropAt.set(conn.id, now)
+        this.broadcast(
           JSON.stringify({ type: "snack-dropped", snack } satisfies Message),
-          [sender.id],
+          [conn.id],
         )
         return
       }
@@ -399,14 +433,14 @@ export default class PokerRoom implements Party.Server {
         if (!this.state.rageEnabled) return
         if (typeof msg.id !== "string" || msg.id.length > 64) return
         const now = Date.now()
-        if (now - (this.lastSnackEatAt.get(sender.id) ?? 0) < 40) return
-        this.lastSnackEatAt.set(sender.id, now)
+        if (now - (this.lastSnackEatAt.get(conn.id) ?? 0) < 40) return
+        this.lastSnackEatAt.set(conn.id, now)
         // First claim wins; later claims for the same snack are dropped so only
         // one fighter is ever told they ate it.
         if (this.eatenSnacks.has(msg.id)) return
         if (this.eatenSnacks.size > 4096) this.eatenSnacks.clear()
         this.eatenSnacks.add(msg.id)
-        this.room.broadcast(
+        this.broadcast(
           JSON.stringify({
             type: "snack-eaten",
             id: msg.id,
@@ -492,7 +526,7 @@ export default class PokerRoom implements Party.Server {
         break
       }
       case "set-spectator": {
-        this.ensureParticipant(clientId, sender.id)
+        this.ensureParticipant(clientId, conn)
         const enabled = !!msg.enabled
         const p = this.state.participants[clientId]
         this.state = {
@@ -538,7 +572,7 @@ export default class PokerRoom implements Party.Server {
         if (this.state.break) break
         const name =
           this.state.participants[clientId]?.name ??
-          this.connToProfile.get(sender.id)?.name ??
+          conn.state?.name ??
           "Someone"
         this.state = {
           ...this.state,
@@ -648,7 +682,7 @@ export default class PokerRoom implements Party.Server {
           },
         }
         this.broadcastState()
-        this.room.broadcast(
+        this.broadcast(
           JSON.stringify({
             type: "presence",
             event: "join",
@@ -679,7 +713,7 @@ export default class PokerRoom implements Party.Server {
       case "rage-restart": {
         if (!isHost || !this.state.rageEnabled) return
         this.eatenSnacks.clear()
-        this.room.broadcast(
+        this.broadcast(
           JSON.stringify({ type: "rage-restarted" } satisfies Message),
         )
         return
@@ -688,9 +722,9 @@ export default class PokerRoom implements Party.Server {
         if (!this.state.rageEnabled) return
         const name =
           this.state.participants[clientId]?.name ??
-          this.connToProfile.get(sender.id)?.name ??
+          conn.state?.name ??
           "Someone"
-        this.room.broadcast(
+        this.broadcast(
           JSON.stringify({
             type: "rage-invited",
             from: clientId,
@@ -709,9 +743,9 @@ export default class PokerRoom implements Party.Server {
         )
           return
         const now = Date.now()
-        if (now - (this.lastRageAt.get(sender.id) ?? 0) < 30) return
-        this.lastRageAt.set(sender.id, now)
-        this.room.broadcast(
+        if (now - (this.lastRageAt.get(conn.id) ?? 0) < 30) return
+        this.lastRageAt.set(conn.id, now)
+        this.broadcast(
           JSON.stringify({
             type: "rage",
             from: clientId,
@@ -733,19 +767,13 @@ export default class PokerRoom implements Party.Server {
     this.broadcastState()
   }
 
-  onClose(conn: Party.Connection) {
-    const clientId = this.connToClientId.get(conn.id) ?? conn.id
-    this.connToClientId.delete(conn.id)
-    this.connToSecret.delete(conn.id)
-    this.connToProfile.delete(conn.id)
+  onClose(conn: Connection<ConnState>) {
+    const clientId = conn.state?.clientId ?? conn.id
     this.scheduleCleanup()
 
-    const remaining = (this.connCounts.get(clientId) ?? 1) - 1
-    if (remaining > 0) {
-      this.connCounts.set(clientId, remaining)
-      return
-    }
-    this.connCounts.delete(clientId)
+    // A second tab keeps the client present; closing the last connection
+    // behaves as before.
+    if (this.hasOtherLiveConnection(conn.id, clientId)) return
 
     const left = this.state.participants[clientId]
     if (!left) return
@@ -757,7 +785,7 @@ export default class PokerRoom implements Party.Server {
       speaker: this.state.speaker === clientId ? null : this.state.speaker,
     }
     this.broadcastState()
-    this.room.broadcast(
+    this.broadcast(
       JSON.stringify({
         type: "presence",
         event: "leave",
@@ -847,7 +875,7 @@ export default class PokerRoom implements Party.Server {
   }
 
   private persist() {
-    void this.room.storage.put<PersistedData>("room", {
+    void this.ctx.storage.put<PersistedData>("room", {
       state: this.state,
       hostSecret: this.hostSecret,
     })
@@ -855,12 +883,24 @@ export default class PokerRoom implements Party.Server {
 
   private broadcastState() {
     this.persist()
-    for (const conn of this.room.getConnections()) {
-      const clientId = this.connToClientId.get(conn.id)
-      const projected = projectState(this.state, clientId)
+    for (const conn of this.getConnections<ConnState>()) {
+      const projected = projectState(this.state, conn.state?.clientId)
       conn.send(
         JSON.stringify({ type: "state", state: projected } satisfies Message),
       )
     }
   }
 }
+
+export default {
+  async fetch(request: Request, env: Cloudflare.Env): Promise<Response> {
+    return (
+      (await routePartykitRequest(request, env, {
+        // Trim the connection URL before the DO stores it in the WebSocket
+        // attachment (done in accept(), before onConnect); the upgraded
+        // request's headers, including x-partykit-*, are carried over.
+        onBeforeConnect: (req) => new Request(clampConnectionUrl(req.url), req),
+      })) ?? new Response("Not found", { status: 404 })
+    )
+  },
+} satisfies ExportedHandler<Cloudflare.Env>
