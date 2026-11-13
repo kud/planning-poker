@@ -108,7 +108,6 @@ src/
 │   └── room/[id]/        # The room view
 ├── components/
 │   ├── room-view.tsx     # Core voting UI
-│   ├── participant-card.tsx
 │   ├── playing-card.tsx
 │   ├── avatar-picker.tsx
 │   ├── deck-selector.tsx
@@ -138,6 +137,7 @@ src/
 | `npm run build`        | Production build                                                  |
 | `npm run start`        | Serve the production build                                        |
 | `npm run lint`         | Run ESLint                                                        |
+| `npm test`             | Run the unit tests (Vitest)                                       |
 
 ### Configuration
 

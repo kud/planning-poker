@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 
 ---
 
+## [Unreleased]
+
+### Features
+
+- Move the room server from hosted PartyKit, which has shut down, to PartyServer on Cloudflare Workers with hibernating Durable Objects; production clients now connect to the Workers host by default ([ea13a1a](https://github.com/kud/planning-poker/commit/ea13a1a), [7e732e7](https://github.com/kud/planning-poker/commit/7e732e7))
+- Other players' votes stay hidden on the wire until the reveal, not just on screen ([a1168a9](https://github.com/kud/planning-poker/commit/a1168a9))
+- Rage arena snacks can be picked up in multiplayer, with the server deciding who got there first ([3b53e40](https://github.com/kud/planning-poker/commit/3b53e40))
+
 ## [1.0.0] — 2026-06-12
 
 The casino release. 🃏
