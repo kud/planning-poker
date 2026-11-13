@@ -2,7 +2,7 @@
   "name": "planning-poker",
   "version": "1.0.2",
   "license": "MIT",
-  "homepage": "https://planning-poker.beansontoast.app",
+  "homepage": "https://kud.io/projects/planning-poker",
   "private": true,
   "scripts": {
     "dev": "next dev",
