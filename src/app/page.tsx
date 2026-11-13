@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { AvatarPicker } from "@/components/avatar-picker"
+import { SiteFooter } from "@/components/site-footer"
 
 const DecorativeCard = ({
   value,
@@ -519,17 +520,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <footer className="relative border-t border-white/8 py-8 text-center text-xs text-slate-500">
-        🃏 Planning Poker — MIT licensed ·{" "}
-        <a
-          href="https://github.com/kud/planning-poker"
-          target="_blank"
-          rel="noreferrer"
-          className="underline underline-offset-4 hover:text-slate-300 transition-colors"
-        >
-          GitHub
-        </a>
-      </footer>
+      <SiteFooter className="relative border-t border-white/8 py-8" />
     </main>
   )
 }

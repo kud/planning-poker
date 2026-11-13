@@ -84,6 +84,7 @@ import {
   playEnterRoom,
 } from "@/lib/sounds"
 import { saveSettings } from "@/lib/settings"
+import { SiteFooter } from "@/components/site-footer"
 
 type Theme = "dark" | "light"
 type ThemePref = "system" | "dark" | "light"
@@ -1517,6 +1518,11 @@ export const RoomView = ({
             </div>
           )}
         </div>
+
+        <SiteFooter
+          tone={theme}
+          className="flex-none pt-1 pb-[max(0.5rem,env(safe-area-inset-bottom))]"
+        />
 
         <OnboardingHints isHost={isHost} />
 
