@@ -69,6 +69,8 @@ export const SettingsDialog = ({
         </DialogHeader>
         <div className="flex flex-col gap-4 pt-2">
           <div className="flex items-center gap-3">
+            {/* DiceBear serves tiny remote SVGs, which next/image won't optimise */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={avatarUrl(avatar)}
               alt="avatar preview"

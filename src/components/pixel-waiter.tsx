@@ -107,13 +107,12 @@ export const PixelWaiter = ({
   const [spilled, setSpilled] = useState(false)
   const clinked = useRef(false)
 
-  useEffect(() => {
-    if (active && !phase) {
-      clinked.current = false
-      setSpilled(false)
-      setPhase("in")
-    }
-  }, [active, phase])
+  // A new run starts as soon as `active` arrives; React re-renders straight
+  // away with the updated state, before anything is painted.
+  if (active && !phase) {
+    setSpilled(false)
+    setPhase("in")
+  }
 
   const walking = phase === "in" || phase === "out"
 
@@ -154,6 +153,7 @@ export const PixelWaiter = ({
       onAnimationComplete={() => {
         if (phase === "in") setPhase("pause")
         if (phase === "out") {
+          clinked.current = false
           setPhase(null)
           onDone()
         }

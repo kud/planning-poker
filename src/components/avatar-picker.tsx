@@ -42,6 +42,8 @@ export const AvatarPicker = ({
                 : "border-transparent hover:border-primary/40",
             )}
           >
+            {/* DiceBear serves tiny remote SVGs, which next/image won't optimise */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={avatarUrl(seed)} alt="avatar" className="w-full h-full" />
           </button>
         ))}

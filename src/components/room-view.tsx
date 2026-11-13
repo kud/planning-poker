@@ -1,6 +1,13 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback } from "react"
+import {
+  useState,
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useCallback,
+  useSyncExternalStore,
+} from "react"
 import Link from "next/link"
 import {
   motion,
@@ -80,6 +87,25 @@ import { saveSettings } from "@/lib/settings"
 
 type Theme = "dark" | "light"
 type ThemePref = "system" | "dark" | "light"
+
+// RoomView only mounts once the socket has delivered state, so these browser
+// reads never run during server rendering.
+const readThemePref = (): ThemePref => {
+  const saved = localStorage.getItem("pp-theme")
+  return saved === "dark" || saved === "light" || saved === "system"
+    ? saved
+    : "system"
+}
+
+const DARK_QUERY = "(prefers-color-scheme: dark)"
+const subscribeToColourScheme = (onChange: () => void) => {
+  const mq = window.matchMedia(DARK_QUERY)
+  mq.addEventListener("change", onChange)
+  return () => mq.removeEventListener("change", onChange)
+}
+const readSystemTheme = (): Theme =>
+  window.matchMedia(DARK_QUERY).matches ? "dark" : "light"
+const NO_ONE_ON_FIRE: ReadonlySet<string> = new Set()
 
 type Props = {
   state: RoomState
@@ -601,17 +627,33 @@ export const RoomView = ({
   catStroll,
   onCatStroll,
 }: Props) => {
-  const [themePref, setThemePref] = useState<ThemePref>("system")
-  const [systemTheme, setSystemTheme] = useState<Theme>("dark")
+  const [themePref, setThemePref] = useState<ThemePref>(readThemePref)
+  const systemTheme = useSyncExternalStore(
+    subscribeToColourScheme,
+    readSystemTheme,
+    (): Theme => "dark",
+  )
   const theme: Theme = themePref === "system" ? systemTheme : themePref
   const [rageActive, setRageActive] = useState(false)
   const [announcement, setAnnouncement] = useState<Announcement | null>(null)
   const [rollingDice, setRollingDice] = useState(false)
-  const [muted, setMutedState] = useState(false)
+  const [muted, setMutedState] = useState(isMuted)
   const [coffeeRun, setCoffeeRun] = useState(false)
   // Who's currently brawling (recomputed on a timer — ragePlayers is a ref and
   // won't re-render on its own). Drives the on-fire badge in the classic view.
-  const [onFireIds, setOnFireIds] = useState<Set<string>>(new Set())
+  const [brawlingIds, setBrawlingIds] =
+    useState<ReadonlySet<string>>(NO_ONE_ON_FIRE)
+  const onFireIds = state.rageEnabled ? brawlingIds : NO_ONE_ON_FIRE
+  // Turning rage off closes the arena for everyone, in the same render.
+  if (!state.rageEnabled && rageActive) setRageActive(false)
+  // The waiter walks in when a break starts, including one already running
+  // when this view mounts.
+  const breakStatus = state.break?.status
+  const [seenBreakStatus, setSeenBreakStatus] = useState<typeof breakStatus>()
+  if (breakStatus !== seenBreakStatus) {
+    setSeenBreakStatus(breakStatus)
+    if (breakStatus === "active") setCoffeeRun(true)
+  }
 
   // Single owned dismiss timer: any new announcement supersedes the previous
   // one's close, so an unrelated re-render can never strand the bubble open.
@@ -623,7 +665,6 @@ export const RoomView = ({
   }, [])
 
   useEffect(() => {
-    setMutedState(isMuted())
     playEnterRoom()
   }, [])
 
@@ -662,15 +703,17 @@ export const RoomView = ({
 
   // The dealer pipes up when a charged reaction (love / the bird) lands.
   const lastReactedId = useRef(0)
+  const commentOnReaction = useEffectEvent((latest: Reaction) => {
+    const comment = reactionComment(latest.name, latest.emoji)
+    if (comment) announce(comment)
+  })
   useEffect(() => {
     if (!reactions || reactions.length === 0) return
     const latest = reactions[reactions.length - 1]
     if (latest.id <= lastReactedId.current) return
     lastReactedId.current = latest.id
-    const comment = reactionComment(latest.name, latest.emoji)
-    if (!comment) return
-    announce(comment)
-  }, [reactions, announce])
+    commentOnReaction(latest)
+  }, [reactions])
 
   // Dealer calls out a consensus streak as it climbs (overrides the generic
   // reveal quip, since back-to-back agreement is the more exciting beat).
@@ -690,24 +733,19 @@ export const RoomView = ({
     prevStreak.current = streak
   }, [streak, announce])
 
+  // A new speaker starts the dice roll in the same render; the effect below
+  // only plays the sound and stops the roll.
+  const [rolledFor, setRolledFor] = useState<string | null>(null)
+  if (state.speaker !== rolledFor) {
+    setRolledFor(state.speaker)
+    setRollingDice(!!state.speaker)
+  }
   useEffect(() => {
     if (!state.speaker) return
     playDice()
-    setRollingDice(true)
     const timer = setTimeout(() => setRollingDice(false), 900)
     return () => clearTimeout(timer)
   }, [state.speaker])
-
-  useEffect(() => {
-    const saved = localStorage.getItem("pp-theme") as ThemePref | null
-    if (saved === "dark" || saved === "light" || saved === "system")
-      setThemePref(saved)
-    const mq = window.matchMedia("(prefers-color-scheme: dark)")
-    const apply = () => setSystemTheme(mq.matches ? "dark" : "light")
-    apply()
-    mq.addEventListener("change", apply)
-    return () => mq.removeEventListener("change", apply)
-  }, [])
 
   const cycleTheme = () => {
     const order: ThemePref[] = ["system", "light", "dark"]
@@ -792,10 +830,7 @@ export const RoomView = ({
   // Anyone actively brawling (or who just lit the fuse) shows on fire to those
   // who stayed at the table. Recomputed off-render since it reads a ref + clock.
   useEffect(() => {
-    if (!state.rageEnabled) {
-      setOnFireIds(new Set())
-      return
-    }
+    if (!state.rageEnabled) return
     const compute = () => {
       const now = Date.now()
       const ids = new Set<string>()
@@ -803,7 +838,7 @@ export const RoomView = ({
         for (const [id, p] of ragePlayers.current.entries())
           if (now - p.at < 3000) ids.add(id)
       if (rageInvite) ids.add(rageInvite.from)
-      setOnFireIds(ids)
+      setBrawlingIds(ids)
     }
     compute()
     const iv = setInterval(compute, 700)
@@ -841,15 +876,6 @@ export const RoomView = ({
       cancelled = true
     }
   }, [state.revealed, isConsensus, reduceMotion])
-
-  useEffect(() => {
-    if (!state.rageEnabled) setRageActive(false)
-  }, [state.rageEnabled])
-
-  // Waiter walks in when a break starts.
-  useEffect(() => {
-    if (state.break?.status === "active") setCoffeeRun(true)
-  }, [state.break?.status])
 
   // Dealer heckles the table the moment the round timer runs out.
   const timerEndsAt = state.timer?.endsAt

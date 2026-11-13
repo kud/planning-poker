@@ -1,6 +1,12 @@
 "use client"
 
-import { useEffect, useRef, useState, type MutableRefObject } from "react"
+import {
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+  type MutableRefObject,
+} from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Participant, Snack } from "@/lib/types"
 import type { RagePlayer } from "@/hooks/use-party-room"
@@ -267,7 +273,8 @@ export const RageArena = ({
     { id: string; name: string; kills: number }[]
   >([])
 
-  const restart = () => {
+  // Game-engine state lives in refs, so a restart revives it from an effect.
+  const reviveFighters = useEffectEvent(() => {
     const m = me.current
     m.hp = 100
     m.deadUntil = 0
@@ -279,17 +286,11 @@ export const RageArena = ({
     })
     chair.current = { x: 0.5, y: 0.5, heldBy: null }
     chairMineRef.current = false
-    setChairHeldByMe(false)
     lastHitFrom.current.clear()
     pendingHeal.current.clear()
     killsRef.current.clear()
     winnerRef.current = false
-    setLeaderboard([])
-    setPools([])
-    setBloods([])
-    setLitter([])
-    setFlash(null)
-  }
+  })
 
   // Don't snap straight back to the table — drop the ring curtains, then exit.
   const beginExit = () => {
@@ -299,6 +300,16 @@ export const RageArena = ({
     playBell()
     setTimeout(onExit, 1100)
   }
+  const onEscape = useEffectEvent(beginExit)
+
+  // Read from the game loop, so it sees the current roster without restarting it.
+  const fighterName = useEffectEvent((id: string) =>
+    id === myId
+      ? "You"
+      : (bots.current.find((b) => b.id === id)?.name ??
+        participants[id]?.name ??
+        "Fighter"),
+  )
 
   const addBot = () => {
     const n = ++botSeq.current
@@ -412,9 +423,19 @@ export const RageArena = ({
   }, [])
 
   // Host-triggered restart arrives as a signal — revive everyone locally.
+  // What the ring shows is cleared in the same render.
+  const [seenRestart, setSeenRestart] = useState(restartSignal)
+  if (restartSignal !== seenRestart) {
+    setSeenRestart(restartSignal)
+    setChairHeldByMe(false)
+    setLeaderboard([])
+    setPools([])
+    setBloods([])
+    setLitter([])
+    setFlash(null)
+  }
   useEffect(() => {
-    if (restartSignal > 0) restart()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (restartSignal > 0) reviveFighters()
   }, [restartSignal])
 
   // Refresh roster + ringside crowd occasionally (positions update via refs).
@@ -479,7 +500,7 @@ export const RageArena = ({
       clearInterval(toss)
       clearInterval(shout)
     }
-  }, [intro])
+  }, [intro, myId])
 
   // Each heckle clears itself shortly after it pops.
   useEffect(() => {
@@ -503,7 +524,7 @@ export const RageArena = ({
         }
         return
       }
-      if (k === "escape") return beginExit()
+      if (k === "escape") return onEscape()
       keys.current.add(k)
       target.current = null
     }
@@ -518,7 +539,7 @@ export const RageArena = ({
       window.removeEventListener("keydown", down)
       window.removeEventListener("keyup", up)
     }
-  }, [onExit])
+  }, [])
 
   useEffect(() => {
     let raf = 0
@@ -615,15 +636,9 @@ export const RageArena = ({
             attackerId,
             (killsRef.current.get(attackerId) ?? 0) + 1,
           )
-          const nameOf = (id: string) =>
-            id === myId
-              ? "You"
-              : (bots.current.find((b) => b.id === id)?.name ??
-                participants[id]?.name ??
-                "Fighter")
           setLeaderboard(
             [...killsRef.current.entries()]
-              .map(([id, kills]) => ({ id, name: nameOf(id), kills }))
+              .map(([id, kills]) => ({ id, name: fighterName(id), kills }))
               .sort((x, y) => y.kills - x.kills)
               .slice(0, 5),
           )

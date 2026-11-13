@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useSyncExternalStore } from "react"
 import { useRouter } from "next/navigation"
 import { avatarUrl, randomSeed } from "@/lib/avatar"
 import { loadSettings, saveSettings, pruneStaleRooms } from "@/lib/settings"
@@ -49,36 +49,70 @@ const DecorativeCard = ({
   </motion.div>
 )
 
+type FormSeed = {
+  name: string
+  roomId: string
+  mode: "create" | "join"
+  avatar: string
+  avatarOptions: string[]
+}
+
+const EMPTY_SEED: FormSeed = {
+  name: "",
+  roomId: "",
+  mode: "create",
+  avatar: "",
+  avatarOptions: [],
+}
+
+// Reads the browser-only bits: the ?join= code and the saved profile.
+const readFormSeed = (): FormSeed => {
+  const join = new URLSearchParams(window.location.search).get("join")
+  const saved = loadSettings()
+  const options = Array.from({ length: 8 }, randomSeed)
+  const avatarOptions =
+    saved && !options.includes(saved.avatar)
+      ? [saved.avatar, ...options.slice(1)]
+      : options
+  return {
+    name: saved?.name ?? "",
+    roomId: join ?? "",
+    mode: join ? "join" : "create",
+    avatar: saved?.avatar ?? options[0],
+    avatarOptions,
+  }
+}
+
+const subscribeToNothing = () => () => {}
+
+// The prerendered HTML has no access to the URL or localStorage, so the form
+// renders empty for hydration, then remounts once with the browser's values.
 const LandingForm = () => {
-  const router = useRouter()
-
-  const [name, setName] = useState("")
-  const [roomId, setRoomId] = useState("")
-  const [mode, setMode] = useState<"create" | "join">("create")
-  const [avatar, setAvatar] = useState("")
-  const [avatarOptions, setAvatarOptions] = useState<string[]>([])
-
+  const hydrated = useSyncExternalStore(
+    subscribeToNothing,
+    () => true,
+    () => false,
+  )
   useEffect(() => {
     pruneStaleRooms()
-    const join = new URLSearchParams(window.location.search).get("join")
-    if (join) {
-      setRoomId(join)
-      setMode("join")
-    }
-    const saved = loadSettings()
-    const options = Array.from({ length: 8 }, randomSeed)
-    if (saved) {
-      setName(saved.name)
-      const withSaved = options.includes(saved.avatar)
-        ? options
-        : [saved.avatar, ...options.slice(1)]
-      setAvatarOptions(withSaved)
-      setAvatar(saved.avatar)
-    } else {
-      setAvatarOptions(options)
-      setAvatar(options[0])
-    }
   }, [])
+  return (
+    <LandingFormFields
+      key={hydrated ? "client" : "server"}
+      seed={hydrated ? readFormSeed : () => EMPTY_SEED}
+    />
+  )
+}
+
+const LandingFormFields = ({ seed }: { seed: () => FormSeed }) => {
+  const router = useRouter()
+
+  const [initial] = useState(seed)
+  const [name, setName] = useState(initial.name)
+  const [roomId, setRoomId] = useState(initial.roomId)
+  const [mode, setMode] = useState(initial.mode)
+  const [avatar, setAvatar] = useState(initial.avatar)
+  const [avatarOptions, setAvatarOptions] = useState(initial.avatarOptions)
 
   const shuffleAvatars = () => {
     const options = Array.from({ length: 8 }, randomSeed)
