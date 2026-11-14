@@ -12,6 +12,11 @@ import { Participant, Snack } from "@/lib/types"
 import type { RagePlayer } from "@/hooks/use-party-room"
 import { avatarUrl } from "@/lib/avatar"
 import { cn } from "@/lib/utils"
+import {
+  shouldSendRageMove,
+  type RageMoveState,
+  type LastSent,
+} from "@/lib/rage-move-throttle"
 import { DealerSprite } from "@/components/pixel-dealer"
 import { RotateCcw } from "lucide-react"
 import {
@@ -218,7 +223,7 @@ export const RageArena = ({
   const meFistSide = useRef<"left" | "right">("left")
   const spaceHeld = useRef(false)
   const spaceDownAt = useRef(0)
-  const lastSent = useRef(0)
+  const lastSentState = useRef<LastSent>(null)
   const lastHitFrom = useRef<Map<string, number>>(new Map())
   // When a fighter took a hit → flash + shake their node until this timestamp,
   // so every point of damage has an unmistakable on-screen cause.
@@ -842,8 +847,14 @@ export const RageArena = ({
         }
       }
 
-      if (now - lastSent.current > 50) {
-        lastSent.current = now
+      const nextState: RageMoveState = {
+        x: m.x,
+        y: m.y,
+        punching: mePunching,
+        hp: m.hp,
+      }
+      if (shouldSendRageMove(now, lastSentState.current, nextState)) {
+        lastSentState.current = { at: now, ...nextState }
         onMove(m.x, m.y, mePunching, m.hp)
       }
 
