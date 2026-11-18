@@ -137,7 +137,14 @@ type Props = {
   onStartTimer?: (seconds: number) => void
   onClearTimer?: () => void
   onSetRage?: (enabled: boolean) => void
-  onRageMove?: (x: number, y: number, punching: boolean, hp: number) => void
+  onRageMove?: (
+    x: number,
+    y: number,
+    punching: boolean,
+    hp: number,
+    vx: number,
+    vy: number,
+  ) => void
   onDropSnack?: (snack: Snack) => void
   onEatSnack?: (id: string) => void
   snackDrops?: MutableRefObject<Snack[]>

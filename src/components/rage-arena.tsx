@@ -13,10 +13,18 @@ import type { RagePlayer } from "@/hooks/use-party-room"
 import { avatarUrl } from "@/lib/avatar"
 import { cn } from "@/lib/utils"
 import {
-  shouldSendRageMove,
+  decideRageMove,
+  markSent,
   type RageMoveState,
   type LastSent,
 } from "@/lib/rage-move-throttle"
+import {
+  createRemoteSmoother,
+  forgetRemote,
+  recordSample,
+  renderPosition,
+  RING_EDGE,
+} from "@/lib/rage-smoothing"
 import { DealerSprite } from "@/components/pixel-dealer"
 import { RotateCcw } from "lucide-react"
 import {
@@ -32,7 +40,14 @@ type Props = {
   isHost: boolean
   participants: Record<string, Participant>
   ragePlayers: MutableRefObject<Map<string, RagePlayer>>
-  onMove: (x: number, y: number, punching: boolean, hp: number) => void
+  onMove: (
+    x: number,
+    y: number,
+    punching: boolean,
+    hp: number,
+    vx: number,
+    vy: number,
+  ) => void
   // Snack sync: the elected spawner drops food for everyone; any fighter claims
   // one on pickup. `snackDrops`/`snackEats` are ref-backed inboxes the loop drains.
   onDropSnack: (snack: Snack) => void
@@ -224,6 +239,10 @@ export const RageArena = ({
   const spaceHeld = useRef(false)
   const spaceDownAt = useRef(0)
   const lastSentState = useRef<LastSent>(null)
+  // Previous frame's position and time, to send velocity in units per ms.
+  const lastFrame = useRef<{ x: number; y: number; at: number } | null>(null)
+  // Remote fighters arrive at ~5 Hz; this draws them between packets.
+  const remoteSmoother = useRef(createRemoteSmoother())
   const lastHitFrom = useRef<Map<string, number>>(new Map())
   // When a fighter took a hit → flash + shake their node until this timestamp,
   // so every point of damage has an unmistakable on-screen cause.
@@ -552,7 +571,7 @@ export const RageArena = ({
   useEffect(() => {
     let raf = 0
     // Keep fighters inset from the ring edge so the avatar is never clipped.
-    const EDGE = 0.06
+    const EDGE = RING_EDGE
     const clamp = (n: number) => Math.max(EDGE, Math.min(1 - EDGE, n))
     const loop = () => {
       const m = me.current
@@ -737,6 +756,24 @@ export const RageArena = ({
         bot.y = clamp(bot.y + bot.vy)
       }
 
+      // --- remote fighters: one smoothed position per frame, shared by combat
+      // and rendering so a hit lands where the attacker is drawn ---
+      const remotePos = new Map<string, { x: number; y: number }>()
+      for (const id of remoteSmoother.current.keys())
+        if (!ragePlayers.current.has(id))
+          forgetRemote(remoteSmoother.current, id)
+      for (const [id, p] of ragePlayers.current) {
+        recordSample(remoteSmoother.current, id, {
+          x: p.x,
+          y: p.y,
+          at: p.at,
+          vx: p.vx,
+          vy: p.vy,
+        })
+        const pos = renderPosition(remoteSmoother.current, id, now)
+        if (pos) remotePos.set(id, pos)
+      }
+
       // --- unified combat: punchers hit nearby victims ---
       if (!intro) {
         const punchers = [
@@ -750,7 +787,10 @@ export const RageArena = ({
             // ghost keeps landing hits for up to 400ms with no living attacker
             // on screen (the "lost health but nobody hit me" bug).
             .filter(([, p]) => p.hp > 0 && p.punching && now - p.at < 400)
-            .map(([id, p]) => ({ id, x: p.x, y: p.y })),
+            .map(([id, p]) => {
+              const pos = remotePos.get(id) ?? p
+              return { id, x: pos.x, y: pos.y }
+            }),
         ]
 
         // Punching near a free chair grabs it (always — even solo). Bots never
@@ -850,15 +890,27 @@ export const RageArena = ({
         }
       }
 
+      const prevFrame = lastFrame.current
+      const frameDt = prevFrame ? now - prevFrame.at : 0
+      lastFrame.current = { x: m.x, y: m.y, at: now }
       const nextState: RageMoveState = {
         x: m.x,
         y: m.y,
         punching: mePunching,
         hp: m.hp,
+        vx: prevFrame && frameDt > 0 ? (m.x - prevFrame.x) / frameDt : 0,
+        vy: prevFrame && frameDt > 0 ? (m.y - prevFrame.y) / frameDt : 0,
       }
-      if (shouldSendRageMove(now, lastSentState.current, nextState)) {
-        lastSentState.current = { at: now, ...nextState }
-        onMoveRef.current(m.x, m.y, mePunching, m.hp)
+      const decision = decideRageMove(now, lastSentState.current, nextState)
+      if (decision) {
+        lastSentState.current = markSent(
+          now,
+          lastSentState.current,
+          nextState,
+          decision,
+        )
+        const s = nextState
+        onMoveRef.current(s.x, s.y, s.punching, s.hp, s.vx, s.vy)
       }
 
       // --- render transforms ---
@@ -886,7 +938,7 @@ export const RageArena = ({
               fistSide = bot.fistSide
             } else {
               const net = ragePlayers.current.get(id)
-              pos = net ?? { x: 0.5, y: 0.5 }
+              pos = remotePos.get(id) ?? net ?? { x: 0.5, y: 0.5 }
               hp = net?.hp ?? 100
               isPunching = net?.punching ?? false
               fistSide = Math.floor((net?.at ?? 0) / 150) % 2 ? "left" : "right"

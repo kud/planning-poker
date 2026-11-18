@@ -122,7 +122,17 @@ export type Message =
   | { type: "rage-invited"; from: string; name: string }
   | { type: "rage-restart" }
   | { type: "rage-restarted" }
-  | { type: "rage-move"; x: number; y: number; punching: boolean; hp: number }
+  // vx/vy: velocity in ring units per ms, for dead reckoning; optional so
+  // clients and server can deploy in either order.
+  | {
+      type: "rage-move"
+      x: number
+      y: number
+      punching: boolean
+      hp: number
+      vx?: number
+      vy?: number
+    }
   | {
       type: "rage"
       from: string
@@ -130,6 +140,8 @@ export type Message =
       y: number
       punching: boolean
       hp: number
+      vx?: number
+      vy?: number
     }
   | { type: "react"; emoji: string }
   | { type: "reaction"; from: string; name: string; emoji: string }

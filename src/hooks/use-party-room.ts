@@ -39,6 +39,8 @@ export type RagePlayer = {
   y: number
   punching: boolean
   hp: number
+  vx?: number
+  vy?: number
   at: number
 }
 
@@ -172,6 +174,8 @@ export const usePartyRoom = ({
           y: msg.y,
           punching: msg.punching,
           hp: msg.hp,
+          vx: msg.vx,
+          vy: msg.vy,
           at: Date.now(),
         })
       }
@@ -265,8 +269,14 @@ export const usePartyRoom = ({
     deny: (clientId: string) => send({ type: "deny", clientId }),
     setRage: (enabled: boolean) => send({ type: "set-rage", enabled }),
     inviteToRage: () => send({ type: "rage-invite" }),
-    sendRageMove: (x: number, y: number, punching: boolean, hp: number) =>
-      send({ type: "rage-move", x, y, punching, hp }),
+    sendRageMove: (
+      x: number,
+      y: number,
+      punching: boolean,
+      hp: number,
+      vx: number,
+      vy: number,
+    ) => send({ type: "rage-move", x, y, punching, hp, vx, vy }),
     dropSnack: (snack: Snack) => send({ type: "snack-drop", snack }),
     eatSnack: (id: string) => send({ type: "snack-eat", id }),
     snackDrops,

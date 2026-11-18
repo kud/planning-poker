@@ -277,7 +277,8 @@ export class PokerRoom extends Server {
             [clientId]: {
               ...participant,
               vote: msg.value,
-              voteRevision: (participant.voteRevision ?? 0) + (isRevoting ? 1 : 0),
+              voteRevision:
+                (participant.voteRevision ?? 0) + (isRevoting ? 1 : 0),
             },
           },
         }
@@ -354,9 +355,7 @@ export class PokerRoom extends Server {
         if (now - (this.lastReactionAt.get(conn.id) ?? 0) < 250) return
         this.lastReactionAt.set(conn.id, now)
         const name =
-          this.state.participants[clientId]?.name ??
-          conn.state?.name ??
-          "Guest"
+          this.state.participants[clientId]?.name ?? conn.state?.name ?? "Guest"
         this.broadcast(
           JSON.stringify({
             type: "reaction",
@@ -379,9 +378,7 @@ export class PokerRoom extends Server {
         if (now - (this.lastPokeAt.get(conn.id) ?? 0) < 150) return
         this.lastPokeAt.set(conn.id, now)
         const name =
-          this.state.participants[clientId]?.name ??
-          conn.state?.name ??
-          "Guest"
+          this.state.participants[clientId]?.name ?? conn.state?.name ?? "Guest"
         this.broadcast(
           JSON.stringify({
             type: "prop-poked",
@@ -756,6 +753,7 @@ export class PokerRoom extends Server {
               typeof msg.hp === "number" && Number.isFinite(msg.hp)
                 ? Math.max(0, Math.min(100, msg.hp))
                 : 100,
+            ...this.rageVelocity(msg.vx, msg.vy),
           } satisfies Message),
           // The sender drew its own move already; don't echo it back.
           [conn.id],
@@ -861,6 +859,20 @@ export class PokerRoom extends Server {
       x: Math.max(0, Math.min(1, s.x)),
       y: Math.max(0, Math.min(1, s.y)),
     }
+  }
+
+  // Optional, so older clients still relay. Bounded well past any real
+  // fighter speed so a bad value can't fling a remote across the ring.
+  private rageVelocity(vx: unknown, vy: unknown) {
+    if (
+      typeof vx !== "number" ||
+      typeof vy !== "number" ||
+      !Number.isFinite(vx) ||
+      !Number.isFinite(vy)
+    )
+      return {}
+    const clampV = (v: number) => Math.max(-0.01, Math.min(0.01, v))
+    return { vx: clampV(vx), vy: clampV(vy) }
   }
 
   private safeUrl(value: unknown): string | null {
