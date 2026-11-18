@@ -757,6 +757,8 @@ export class PokerRoom extends Server {
                 ? Math.max(0, Math.min(100, msg.hp))
                 : 100,
           } satisfies Message),
+          // The sender drew its own move already; don't echo it back.
+          [conn.id],
         )
         return
       }
