@@ -264,11 +264,14 @@ export const RageArena = ({
   // Snacks I've optimistically eaten but the server hasn't confirmed yet →
   // the exact HP I gained per snack, so a lost race can be revoked precisely.
   const pendingHeal = useRef<Map<string, number>>(new Map())
-  // The snack callbacks get a fresh identity every render; keep them in refs so
-  // the ambient timers and rAF loop don't tear down and restart each render.
+  // The move and snack callbacks get a fresh identity every render; keep them
+  // in refs so the ambient timers and rAF loop don't tear down and restart
+  // each render (every room state message re-renders the arena).
+  const onMoveRef = useRef(onMove)
   const onDropSnackRef = useRef(onDropSnack)
   const onEatSnackRef = useRef(onEatSnack)
   useEffect(() => {
+    onMoveRef.current = onMove
     onDropSnackRef.current = onDropSnack
     onEatSnackRef.current = onEatSnack
   })
@@ -855,7 +858,7 @@ export const RageArena = ({
       }
       if (shouldSendRageMove(now, lastSentState.current, nextState)) {
         lastSentState.current = { at: now, ...nextState }
-        onMove(m.x, m.y, mePunching, m.hp)
+        onMoveRef.current(m.x, m.y, mePunching, m.hp)
       }
 
       // --- render transforms ---
@@ -938,7 +941,7 @@ export const RageArena = ({
     }
     raf = requestAnimationFrame(loop)
     return () => cancelAnimationFrame(raf)
-  }, [myId, onMove, ragePlayers, snackDrops, snackEats, intro])
+  }, [myId, ragePlayers, snackDrops, snackEats, intro])
 
   const onPointer = (e: React.PointerEvent) => {
     const rect = containerRef.current?.getBoundingClientRect()
