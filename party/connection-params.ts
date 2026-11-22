@@ -10,7 +10,8 @@ export const MAX_ID_LEN = 128
 export const MAX_TEXT_LEN = 120
 
 export type ConnectionParams = {
-  clientId: string
+  // Private identity token; never broadcast. The public id is derived from it.
+  token: string
   secret: string
   name: string
   avatar: string
@@ -20,11 +21,11 @@ const clamp = (value: string | null, max: number) =>
   (value ?? "").slice(0, max)
 
 // The params partysocket puts on the URL: `_pk` plus the caller's query
-// (`clientId`, `name`, `avatar`, optional `hostSecret`). Everything else is
-// dropped. Absent params stay absent so parseConnectionParams' fallbacks
-// still apply.
+// (`token`, `name`, `avatar`, optional `hostSecret`). Everything else,
+// including the legacy public `clientId`, is dropped. Absent params stay
+// absent so parseConnectionParams' fallbacks still apply.
 const KEPT_PARAMS = [
-  ["clientId", MAX_ID_LEN],
+  ["token", MAX_ID_LEN],
   ["hostSecret", MAX_ID_LEN],
   ["_pk", MAX_ID_LEN],
   ["name", MAX_TEXT_LEN],
@@ -47,7 +48,7 @@ export const parseConnectionParams = (
 ): ConnectionParams => {
   const name = params.get("name")
   return {
-    clientId: clamp(params.get("clientId"), MAX_ID_LEN),
+    token: clamp(params.get("token"), MAX_ID_LEN),
     secret: clamp(params.get("hostSecret"), MAX_ID_LEN),
     name: name === null ? "Guest" : clamp(name, MAX_TEXT_LEN),
     avatar: clamp(params.get("avatar"), MAX_TEXT_LEN),

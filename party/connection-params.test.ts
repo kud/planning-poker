@@ -10,8 +10,8 @@ const parse = (qs: string) => parseConnectionParams(new URLSearchParams(qs))
 
 describe("parseConnectionParams", () => {
   it("reads all four fields", () => {
-    expect(parse("clientId=c1&hostSecret=shhh&name=Ada&avatar=fox")).toEqual({
-      clientId: "c1",
+    expect(parse("token=c1&hostSecret=shhh&name=Ada&avatar=fox")).toEqual({
+      token: "c1",
       secret: "shhh",
       name: "Ada",
       avatar: "fox",
@@ -20,7 +20,7 @@ describe("parseConnectionParams", () => {
 
   it("falls back to empty strings and Guest when fields are absent", () => {
     expect(parse("")).toEqual({
-      clientId: "",
+      token: "",
       secret: "",
       name: "Guest",
       avatar: "",
@@ -33,7 +33,7 @@ describe("parseConnectionParams", () => {
 
   it("clamps identifiers to 128 characters", () => {
     const long = "x".repeat(200)
-    expect(parse(`clientId=${long}`).clientId).toHaveLength(MAX_ID_LEN)
+    expect(parse(`token=${long}`).token).toHaveLength(MAX_ID_LEN)
     expect(parse(`hostSecret=${long}`).secret).toHaveLength(MAX_ID_LEN)
   })
 
@@ -45,7 +45,7 @@ describe("parseConnectionParams", () => {
   })
 
   it("never throws on odd or repeated params", () => {
-    expect(() => parse("clientId=1&clientId=2&name=%ZZ")).not.toThrow()
+    expect(() => parse("token=1&token=2&name=%ZZ")).not.toThrow()
   })
 })
 
@@ -64,21 +64,21 @@ describe("clampConnectionUrl", () => {
   it("clamps identifiers to 128 characters", () => {
     const long = "x".repeat(5000)
     const url = clampConnectionUrl(
-      `https://example.test/parties/main/ROOM?clientId=${long}&hostSecret=${long}&_pk=${long}`,
+      `https://example.test/parties/main/ROOM?token=${long}&hostSecret=${long}&_pk=${long}`,
     )
     const params = new URL(url).searchParams
-    expect(params.get("clientId")).toHaveLength(MAX_ID_LEN)
+    expect(params.get("token")).toHaveLength(MAX_ID_LEN)
     expect(params.get("hostSecret")).toHaveLength(MAX_ID_LEN)
     expect(params.get("_pk")).toHaveLength(MAX_ID_LEN)
   })
 
   it("keeps _pk and leaves absent params absent", () => {
     const url = clampConnectionUrl(
-      "https://example.test/parties/main/ROOM?_pk=u1&clientId=c",
+      "https://example.test/parties/main/ROOM?_pk=u1&token=c",
     )
     const params = new URL(url).searchParams
     expect(params.get("_pk")).toBe("u1")
-    expect(params.get("clientId")).toBe("c")
+    expect(params.get("token")).toBe("c")
     expect(params.get("name")).toBeNull()
     expect(params.get("avatar")).toBeNull()
     expect(params.get("hostSecret")).toBeNull()
@@ -86,12 +86,12 @@ describe("clampConnectionUrl", () => {
 
   it("drops unknown params", () => {
     const url = clampConnectionUrl(
-      "https://example.test/parties/main/ROOM?clientId=c&tracking=x&_aff=y",
+      "https://example.test/parties/main/ROOM?token=c&tracking=x&_aff=y",
     )
     const params = new URL(url).searchParams
     expect(params.get("tracking")).toBeNull()
     expect(params.get("_aff")).toBeNull()
-    expect(params.get("clientId")).toBe("c")
+    expect(params.get("token")).toBe("c")
   })
 
   it("leaves host, path and protocol unchanged", () => {

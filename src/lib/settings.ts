@@ -32,13 +32,14 @@ export const pruneStaleRooms = () => {
   try {
     const cutoff = Date.now() - ROOM_KEY_MAX_AGE_MS
     for (const key of Object.keys(localStorage)) {
-      const match = key.match(/^poker-(?:client|host)-(.+)$/)
+      const match = key.match(/^poker-(?:token|client|host)-(.+)$/)
       if (!match) continue
       const roomId = match[1]
       const seen = Number(localStorage.getItem(`poker-seen-${roomId}`))
       if (!seen) {
         touchRoom(roomId)
       } else if (seen < cutoff) {
+        localStorage.removeItem(`poker-token-${roomId}`)
         localStorage.removeItem(`poker-client-${roomId}`)
         localStorage.removeItem(`poker-host-${roomId}`)
         localStorage.removeItem(`poker-seen-${roomId}`)

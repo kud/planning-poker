@@ -13,13 +13,16 @@ type Props = { hostId: string; name: string; avatar: string }
 
 const emptySubscribe = () => () => {}
 
-const readOrCreateClientId = (roomId: string) => {
-  const key = `poker-client-${roomId}`
+// The private token that binds this browser's identity in the room. It is a
+// new key on purpose: the older `poker-client-*` value was broadcast as the
+// public id, so it cannot serve as a secret.
+const readOrCreateToken = (roomId: string) => {
+  const key = `poker-token-${roomId}`
   const existing = localStorage.getItem(key)
   if (existing) return existing
-  const id = crypto.randomUUID()
-  localStorage.setItem(key, id)
-  return id
+  const token = crypto.randomUUID()
+  localStorage.setItem(key, token)
+  return token
 }
 
 export const GuestRoom = ({ hostId, name, avatar }: Props) => {
@@ -27,9 +30,9 @@ export const GuestRoom = ({ hostId, name, avatar }: Props) => {
     touchRoom(hostId)
   }, [hostId])
 
-  const clientId = useSyncExternalStore(
+  const token = useSyncExternalStore(
     emptySubscribe,
-    () => readOrCreateClientId(hostId),
+    () => readOrCreateToken(hostId),
     () => null,
   )
   const hostSecret = useSyncExternalStore(
@@ -38,7 +41,7 @@ export const GuestRoom = ({ hostId, name, avatar }: Props) => {
     () => null,
   )
 
-  if (!clientId) {
+  if (!token) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <p className="text-muted-foreground animate-pulse">
@@ -53,7 +56,7 @@ export const GuestRoom = ({ hostId, name, avatar }: Props) => {
       roomId={hostId}
       name={name}
       avatar={avatar}
-      clientId={clientId}
+      token={token}
       hostSecret={hostSecret ?? undefined}
     />
   )
@@ -63,17 +66,19 @@ const GuestRoomConnected = ({
   roomId,
   name,
   avatar,
-  clientId,
+  token,
   hostSecret,
 }: {
   roomId: string
   name: string
   avatar: string
-  clientId: string
+  token: string
   hostSecret?: string
 }) => {
   const {
     state,
+    selfId,
+    gate,
     status,
     reactions,
     presenceEvents,
@@ -120,11 +125,12 @@ const GuestRoomConnected = ({
     name,
     avatar,
     hostSecret,
-    clientId,
+    token,
   })
   const { copiedMode, copyCode, copyLink } = useShareRoom(roomId)
   const preferredDeckApplied = useRef(false)
 
+  const clientId = selfId ?? ""
   const amHost = state?.participants[clientId]?.isHost ?? false
 
   useEffect(() => {
@@ -145,12 +151,29 @@ const GuestRoomConnected = ({
     setDeck(deck)
   }
 
-  if (!state) {
+  if (gate) {
+    const copy = {
+      pending: {
+        icon: "✋",
+        title: "Waiting for the host to let you in…",
+        body: "This room is set to approve new joiners. Hang tight.",
+      },
+      denied: {
+        icon: "🚫",
+        title: "The host didn't let you in",
+        body: "Ask the host to re-open the room, or check the room code.",
+      },
+      "room-full": {
+        icon: "🚪",
+        title: "This room is full",
+        body: "It has reached its limit of people. Try again a little later.",
+      },
+    }[gate]
     return (
-      <div className="flex min-h-screen items-center justify-center flex-col gap-3">
-        <p className="text-muted-foreground animate-pulse">
-          Connecting to room…
-        </p>
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 px-6 text-center">
+        <span className="text-4xl">{copy.icon}</span>
+        <p className="text-lg font-semibold">{copy.title}</p>
+        <p className="max-w-sm text-sm text-muted-foreground">{copy.body}</p>
         <Link
           href="/"
           className="text-sm text-muted-foreground underline underline-offset-4"
@@ -161,22 +184,11 @@ const GuestRoomConnected = ({
     )
   }
 
-  const amParticipant = !!state.participants[clientId]
-  const amPending = !!state.pending[clientId]
-
-  if (!amParticipant && (amPending || state.requireApproval)) {
+  if (!state || !selfId) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-3 px-6 text-center">
-        <span className="text-4xl">{amPending ? "✋" : "🚫"}</span>
-        <p className="text-lg font-semibold">
-          {amPending
-            ? "Waiting for the host to let you in…"
-            : "The host didn't let you in"}
-        </p>
-        <p className="max-w-sm text-sm text-muted-foreground">
-          {amPending
-            ? "This room is set to approve new joiners. Hang tight."
-            : "Ask the host to re-open the room, or check the room code."}
+      <div className="flex min-h-screen items-center justify-center flex-col gap-3">
+        <p className="text-muted-foreground animate-pulse">
+          Connecting to room…
         </p>
         <Link
           href="/"

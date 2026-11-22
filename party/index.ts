@@ -19,6 +19,15 @@ import {
   parseConnectionParams,
 } from "./connection-params"
 import { projectState } from "./project-state"
+import { derivePublicId, isValidToken } from "./identity"
+import {
+  MAX_CONNECTIONS,
+  MAX_MESSAGE_CHARS,
+  MAX_PARTICIPANTS,
+  freshBucket,
+  takeToken,
+  type Bucket,
+} from "./limits"
 
 const defaultDeck = (): Deck => ({
   preset: "fibonacci",
@@ -52,12 +61,47 @@ type PersistedData = { state: RoomState; hostSecret: string | null }
 
 // Per-connection data kept in the WebSocket attachment so it survives
 // hibernation wake-ups. The room itself lives in ctx.storage via `persist()`.
+// `clientId` is the public id derived from the connection's private token;
+// the token itself is never kept.
 type ConnState = {
   clientId: string
   secret: string
   name: string
   avatar: string
+  // Set on a connection turned away by a room limit, so its close is ignored.
+  rejected?: boolean
 }
+
+// Message types that change room state or fan out to the whole room, and so
+// spend from the sender's token bucket. The high-frequency arena and prop
+// relays keep their own per-type throttles instead.
+const BUCKETED: ReadonlySet<string> = new Set<Message["type"]>([
+  "vote",
+  "update-profile",
+  "react",
+  "reveal",
+  "reset",
+  "set-deck",
+  "roll-speaker",
+  "set-topic",
+  "save-round",
+  "edit-history",
+  "clear-history",
+  "set-auto-reveal",
+  "set-spectator",
+  "start-timer",
+  "clear-timer",
+  "request-break",
+  "break-vote",
+  "set-break-time",
+  "end-break",
+  "set-approval",
+  "admit",
+  "deny",
+  "set-rage",
+  "rage-restart",
+  "rage-invite",
+])
 
 const ROOM_TTL_MS = 24 * 60 * 60 * 1000
 const MAX_HISTORY = 200
@@ -107,6 +151,12 @@ export class PokerRoom extends Server {
   // whenever the arena resets (rage toggled off or restarted). Held in memory:
   // losing it to hibernation only risks a double-eat, never room state.
   private eatenSnacks = new Set<string>()
+  // Per-connection message budget. Held in memory: a hibernation wake-up only
+  // refills it.
+  private buckets = new Map<string, Bucket>()
+  // Per-room salt for deriving public ids from private tokens. Kept apart
+  // from the room snapshot so ids stay stable when the room is cleaned up.
+  private salt = ""
 
   // Runs on every wake-up (new or evicted instance), reloading the room from
   // storage; every state change went through persist() when it was broadcast.
@@ -115,6 +165,13 @@ export class PokerRoom extends Server {
     if (saved) {
       this.state = { ...freshState(), ...saved.state }
       this.hostSecret = saved.hostSecret
+    }
+    const salt = await this.ctx.storage.get<string>("salt")
+    if (salt) {
+      this.salt = salt
+    } else {
+      this.salt = crypto.randomUUID()
+      await this.ctx.storage.put("salt", this.salt)
     }
   }
 
@@ -150,9 +207,17 @@ export class PokerRoom extends Server {
     return false
   }
 
-  onConnect(conn: Connection<ConnState>, ctx: ConnectionContext) {
+  // partyserver awaits onConnect before completing the upgrade, so no message
+  // from this socket can arrive before its identity is set.
+  async onConnect(conn: Connection<ConnState>, ctx: ConnectionContext) {
     const parsed = parseConnectionParams(new URL(ctx.request.url).searchParams)
-    const clientId = parsed.clientId || conn.id
+    // Identity is bound to a private token: the public id is derived from it
+    // and only the public id is ever sent out. A client without a valid
+    // token (an older build, say) gets a fresh identity for this connection.
+    const token = isValidToken(parsed.token)
+      ? parsed.token
+      : crypto.randomUUID()
+    const clientId = await derivePublicId(token, this.salt)
 
     // The attachment must be in place before the first broadcast: the vote
     // mask is projected per connection from state.clientId.
@@ -164,10 +229,26 @@ export class PokerRoom extends Server {
     })
     this.scheduleCleanup()
 
+    const claimsHost =
+      !!parsed.secret && (!this.hostSecret || parsed.secret === this.hostSecret)
+    const existing = this.state.participants[clientId]
+    const known = !!existing || !!this.state.pending[clientId]
+    const identities =
+      Object.keys(this.state.participants).length +
+      Object.keys(this.state.pending).length
+    if (
+      [...this.getConnections()].length > MAX_CONNECTIONS ||
+      (!known && !claimsHost && identities >= MAX_PARTICIPANTS)
+    ) {
+      this.reject(conn)
+      return
+    }
+
     if (parsed.secret && !this.hostSecret) this.hostSecret = parsed.secret
     const isHost = !!parsed.secret && parsed.secret === this.hostSecret
-    const existing = this.state.participants[clientId]
     const isFirstConnection = !this.hasOtherLiveConnection(conn.id, clientId)
+
+    conn.send(JSON.stringify({ type: "welcome", clientId } satisfies Message))
 
     // Gate new, non-host joiners into a pending bucket when approval is on.
     // Already-admitted participants (reconnects) are grandfathered through.
@@ -210,7 +291,7 @@ export class PokerRoom extends Server {
 
     if (isFirstConnection) {
       const joined = this.state.participants[clientId]
-      this.broadcast(
+      this.broadcastAdmitted(
         JSON.stringify({
           type: "presence",
           event: "join",
@@ -243,6 +324,8 @@ export class PokerRoom extends Server {
 
   onMessage(conn: Connection<ConnState>, message: WSMessage) {
     if (typeof message !== "string") return
+    if (message.length > MAX_MESSAGE_CHARS) return
+    if (!conn.state || conn.state.rejected) return
     let msg: Message
     try {
       msg = JSON.parse(message) as Message
@@ -260,6 +343,8 @@ export class PokerRoom extends Server {
       !this.state.participants[clientId]
     )
       return
+
+    if (BUCKETED.has(msg.type) && !this.spend(conn.id)) return
 
     switch (msg.type) {
       case "vote": {
@@ -356,7 +441,7 @@ export class PokerRoom extends Server {
         this.lastReactionAt.set(conn.id, now)
         const name =
           this.state.participants[clientId]?.name ?? conn.state?.name ?? "Guest"
-        this.broadcast(
+        this.broadcastAdmitted(
           JSON.stringify({
             type: "reaction",
             from: clientId,
@@ -379,7 +464,7 @@ export class PokerRoom extends Server {
         this.lastPokeAt.set(conn.id, now)
         const name =
           this.state.participants[clientId]?.name ?? conn.state?.name ?? "Guest"
-        this.broadcast(
+        this.broadcastAdmitted(
           JSON.stringify({
             type: "prop-poked",
             from: clientId,
@@ -406,7 +491,7 @@ export class PokerRoom extends Server {
           s.segments.length > 24
         )
           return
-        this.broadcast(
+        this.broadcastAdmitted(
           JSON.stringify({ type: "cat-strolled", stroll: s } satisfies Message),
           [conn.id],
         )
@@ -420,7 +505,7 @@ export class PokerRoom extends Server {
         const now = Date.now()
         if (now - (this.lastSnackDropAt.get(conn.id) ?? 0) < 400) return
         this.lastSnackDropAt.set(conn.id, now)
-        this.broadcast(
+        this.broadcastAdmitted(
           JSON.stringify({ type: "snack-dropped", snack } satisfies Message),
           [conn.id],
         )
@@ -437,7 +522,7 @@ export class PokerRoom extends Server {
         if (this.eatenSnacks.has(msg.id)) return
         if (this.eatenSnacks.size > 4096) this.eatenSnacks.clear()
         this.eatenSnacks.add(msg.id)
-        this.broadcast(
+        this.broadcastAdmitted(
           JSON.stringify({
             type: "snack-eaten",
             id: msg.id,
@@ -679,7 +764,7 @@ export class PokerRoom extends Server {
           },
         }
         this.broadcastState()
-        this.broadcast(
+        this.broadcastAdmitted(
           JSON.stringify({
             type: "presence",
             event: "join",
@@ -710,7 +795,7 @@ export class PokerRoom extends Server {
       case "rage-restart": {
         if (!isHost || !this.state.rageEnabled) return
         this.eatenSnacks.clear()
-        this.broadcast(
+        this.broadcastAdmitted(
           JSON.stringify({ type: "rage-restarted" } satisfies Message),
         )
         return
@@ -721,7 +806,7 @@ export class PokerRoom extends Server {
           this.state.participants[clientId]?.name ??
           conn.state?.name ??
           "Someone"
-        this.broadcast(
+        this.broadcastAdmitted(
           JSON.stringify({
             type: "rage-invited",
             from: clientId,
@@ -742,7 +827,7 @@ export class PokerRoom extends Server {
         const now = Date.now()
         if (now - (this.lastRageAt.get(conn.id) ?? 0) < 30) return
         this.lastRageAt.set(conn.id, now)
-        this.broadcast(
+        this.broadcastAdmitted(
           JSON.stringify({
             type: "rage",
             from: clientId,
@@ -768,6 +853,13 @@ export class PokerRoom extends Server {
   }
 
   onClose(conn: Connection<ConnState>) {
+    this.buckets.delete(conn.id)
+    this.lastReactionAt.delete(conn.id)
+    this.lastRageAt.delete(conn.id)
+    this.lastPokeAt.delete(conn.id)
+    this.lastSnackDropAt.delete(conn.id)
+    this.lastSnackEatAt.delete(conn.id)
+    if (conn.state?.rejected) return
     const clientId = conn.state?.clientId ?? conn.id
     this.scheduleCleanup()
 
@@ -785,7 +877,7 @@ export class PokerRoom extends Server {
       speaker: this.state.speaker === clientId ? null : this.state.speaker,
     }
     this.broadcastState()
-    this.broadcast(
+    this.broadcastAdmitted(
       JSON.stringify({
         type: "presence",
         event: "leave",
@@ -895,9 +987,58 @@ export class PokerRoom extends Server {
     })
   }
 
+  // Whether a connection is still waiting on the host: approval is on, it
+  // is not seated and it does not hold the host secret. Such a socket sees
+  // nothing of the room beyond its own place in the queue.
+  private isGated(conn: Connection<ConnState>) {
+    if (!this.state.requireApproval) return false
+    const clientId = conn.state?.clientId
+    if (clientId && this.state.participants[clientId]) return false
+    const secret = conn.state?.secret ?? ""
+    return !(!!this.hostSecret && secret === this.hostSecret)
+  }
+
+  private reject(conn: Connection<ConnState>) {
+    conn.setState((prev) => ({ ...(prev as ConnState), rejected: true }))
+    conn.send(
+      JSON.stringify({ type: "rejected", reason: "room-full" } satisfies Message),
+    )
+    conn.close(4008, "Room is full")
+  }
+
+  private spend(connId: string) {
+    const now = Date.now()
+    let bucket = this.buckets.get(connId)
+    if (!bucket) {
+      bucket = freshBucket(now)
+      this.buckets.set(connId, bucket)
+    }
+    return takeToken(bucket, now)
+  }
+
+  // Room-wide relays (presence, reactions, arena) go to admitted sockets only.
+  private broadcastAdmitted(msg: string, without: string[] = []) {
+    for (const conn of this.getConnections<ConnState>()) {
+      if (without.includes(conn.id)) continue
+      if (conn.state?.rejected || this.isGated(conn)) continue
+      conn.send(msg)
+    }
+  }
+
   private broadcastState() {
     this.persist()
     for (const conn of this.getConnections<ConnState>()) {
+      if (conn.state?.rejected) continue
+      if (this.isGated(conn)) {
+        const clientId = conn.state?.clientId ?? ""
+        conn.send(
+          JSON.stringify({
+            type: "waiting",
+            status: this.state.pending[clientId] ? "pending" : "denied",
+          } satisfies Message),
+        )
+        continue
+      }
       const projected = projectState(this.state, conn.state?.clientId)
       conn.send(
         JSON.stringify({ type: "state", state: projected } satisfies Message),

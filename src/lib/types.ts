@@ -92,6 +92,13 @@ export type Message =
   | { type: "vote"; value: CardValue }
   | { type: "update-profile"; name: string; avatar: string }
   | { type: "state"; state: RoomState }
+  // Sent once to the connecting socket: its own public id, derived on the
+  // server from the private token it connected with.
+  | { type: "welcome"; clientId: string }
+  // Sent instead of the room state to a socket the host has not admitted yet.
+  | { type: "waiting"; status: "pending" | "denied" }
+  // Sent just before the server closes a connection it cannot take.
+  | { type: "rejected"; reason: "room-full" }
   | { type: "reveal" }
   | { type: "reset" }
   | { type: "set-deck"; deck: Deck }
