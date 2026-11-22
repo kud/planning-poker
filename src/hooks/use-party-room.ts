@@ -79,12 +79,18 @@ const PARTYKIT_HOST =
     ? "127.0.0.1:8787"
     : "planning-poker.kud-space.workers.dev")
 
+// What the server says about this socket's place in the room before (or
+// instead of) the room state: waiting on the host, denied, or turned away.
+export type RoomGate = "pending" | "denied" | "room-full" | null
+
 type Options = {
   roomId: string
   name: string
   avatar: string
   hostSecret?: string
-  clientId: string
+  // Private identity token. Never shown to anyone else: the server derives
+  // this client's public id from it and announces that id in `welcome`.
+  token: string
 }
 
 export const usePartyRoom = ({
@@ -92,9 +98,12 @@ export const usePartyRoom = ({
   name,
   avatar,
   hostSecret,
-  clientId,
+  token,
 }: Options) => {
   const [state, setState] = useState<RoomState | null>(null)
+  const [selfId, setSelfId] = useState<string | null>(null)
+  const selfIdRef = useRef<string | null>(null)
+  const [gate, setGate] = useState<RoomGate>(null)
   const [status, setStatus] = useState<ConnectionStatus>("connecting")
   const hasConnected = useRef(false)
   const [reactions, setReactions] = useState<Reaction[]>([])
@@ -116,8 +125,10 @@ export const usePartyRoom = ({
   const socket = usePartySocket({
     host: PARTYKIT_HOST,
     room: roomId,
+    // A room that turned this client away stays closed: no reconnect loop.
+    enabled: gate !== "room-full",
     query: {
-      clientId,
+      token,
       name,
       avatar,
       ...(hostSecret ? { hostSecret } : {}),
@@ -136,7 +147,23 @@ export const usePartyRoom = ({
       } catch {
         return
       }
-      if (msg.type === "state") setState(normalizeState(msg.state))
+      if (msg.type === "welcome") {
+        selfIdRef.current = msg.clientId
+        setSelfId(msg.clientId)
+      }
+      if (msg.type === "state") {
+        setGate(null)
+        setState(normalizeState(msg.state))
+      }
+      if (msg.type === "waiting") {
+        setState(null)
+        setGate(msg.status)
+      }
+      if (msg.type === "rejected") {
+        setGate("room-full")
+        return
+      }
+      const clientId = selfIdRef.current
       if (msg.type === "reaction") {
         const id = ++reactionId.current
         setReactions((current) => [
@@ -226,6 +253,8 @@ export const usePartyRoom = ({
 
   return {
     state,
+    selfId,
+    gate,
     status,
     connected: status === "connected",
     reactions,
