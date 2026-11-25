@@ -49,10 +49,10 @@ const StatChip = ({
     transition={{ delay, type: "spring", stiffness: 400, damping: 24 }}
     className={
       highlight
-        ? "flex flex-col items-center rounded-xl border border-primary/50 bg-primary/20 px-4 py-2 min-w-[52px] shadow-[0_0_16px_rgba(99,102,241,0.3)]"
+        ? "flex flex-col items-center rounded-xl border border-primary/50 bg-primary/20 px-3 py-2 min-w-[52px] shadow-[0_0_16px_rgba(99,102,241,0.3)]"
         : dark
-          ? "flex flex-col items-center rounded-xl border border-white/10 bg-white/8 px-4 py-2 min-w-[52px]"
-          : "flex flex-col items-center rounded-xl border border-slate-200 bg-slate-100 px-4 py-2 min-w-[52px]"
+          ? "flex flex-col items-center rounded-xl border border-white/10 bg-white/8 px-3 py-2 min-w-[52px]"
+          : "flex flex-col items-center rounded-xl border border-slate-200 bg-slate-100 px-3 py-2 min-w-[52px]"
     }
   >
     {children}
@@ -76,7 +76,6 @@ export const VoteSummary = ({
   theme = "dark",
 }: Props) => {
   const dark = theme !== "light"
-  const tallyColor = dark ? "text-white" : "text-slate-900"
   const medianColor = dark ? "text-slate-200" : "text-slate-700"
   const spreadColor = dark ? "text-amber-300" : "text-amber-600"
   const avgColor = dark ? "text-indigo-300" : "text-indigo-600"
@@ -96,22 +95,12 @@ export const VoteSummary = ({
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.85, y: 16 }}
           transition={{ type: "spring", stiffness: 350, damping: 28 }}
-          className="flex flex-wrap gap-2 items-center justify-center pt-2"
+          className="flex flex-nowrap gap-2 items-center justify-center pt-2 max-w-[min(320px,37vw)]"
         >
-          {stats.tally.map(({ value, count }, i) => (
-            <StatChip
-              key={value}
-              label={`×${count}`}
-              delay={i * 0.06}
-              dark={dark}
-            >
-              <span className={`text-xl font-bold ${tallyColor}`}>{value}</span>
-            </StatChip>
-          ))}
           {stats.average !== null && (
             <StatChip
               label="avg"
-              delay={stats.tally.length * 0.06 + 0.06}
+              delay={0}
               highlight
               dark={dark}
             >
@@ -123,7 +112,7 @@ export const VoteSummary = ({
           {stats.median !== null && (
             <StatChip
               label="median"
-              delay={stats.tally.length * 0.06 + 0.12}
+              delay={0.06}
               dark={dark}
             >
               <span className={`text-xl font-bold ${medianColor}`}>
@@ -134,7 +123,7 @@ export const VoteSummary = ({
           {showSpread && (
             <StatChip
               label="spread"
-              delay={stats.tally.length * 0.06 + 0.18}
+              delay={0.12}
               dark={dark}
             >
               <span className={`text-xl font-bold ${spreadColor}`}>
