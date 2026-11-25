@@ -250,7 +250,7 @@ const PixelDealerInner = ({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 6, scale: 0.9 }}
             transition={{ type: "spring", stiffness: 340, damping: 24 }}
-            className="absolute bottom-full mb-3 w-80"
+            className="absolute bottom-full mb-3 w-60"
           >
             <div className="rounded-2xl border border-yellow-500/40 bg-[#10131f]/95 backdrop-blur-md px-5 py-3.5 shadow-[0_10px_32px_rgba(0,0,0,0.5),0_0_18px_rgba(234,179,8,0.18)]">
               <div className="flex items-start gap-3">
@@ -259,7 +259,7 @@ const PixelDealerInner = ({
                   <p className="text-base font-semibold text-yellow-100 leading-snug">
                     {bubble.title}
                   </p>
-                  <p className="text-sm text-yellow-200/70 italic leading-snug mt-1">
+                  <p className="text-sm text-yellow-200/70 italic leading-snug mt-1 line-clamp-1">
                     {bubble.sub}
                   </p>
                 </div>

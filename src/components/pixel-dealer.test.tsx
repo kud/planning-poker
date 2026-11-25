@@ -14,3 +14,16 @@ describe("pixel dealer layering", () => {
     expect(html).not.toContain("z-10")
   })
 })
+
+describe("pixel dealer speech bubble", () => {
+  it("stays narrow and clamps its sub-line to one line", () => {
+    const html = renderToStaticMarkup(
+      <PixelDealer
+        announcement={{ emoji: "🃏", title: "Reveal", sub: "Cards up" }}
+      />
+    )
+    expect(html).toContain("w-60")
+    expect(html).not.toContain("w-80")
+    expect(html).toContain("line-clamp-1")
+  })
+})

@@ -40,6 +40,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { MOBILE_LAYER, TABLE_LAYER } from "@/lib/table-layers"
+import { ANNOUNCE_DWELL_MS } from "@/lib/announcement-dwell"
 import { Button } from "@/components/ui/button"
 import { SeatAvatar } from "@/components/seat-avatar"
 import { TableCard } from "@/components/table-card"
@@ -668,11 +669,14 @@ export const RoomView = ({
   // Single owned dismiss timer: any new announcement supersedes the previous
   // one's close, so an unrelated re-render can never strand the bubble open.
   const announceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const announce = useCallback((a: Announcement) => {
-    setAnnouncement(a)
-    if (announceTimer.current) clearTimeout(announceTimer.current)
-    announceTimer.current = setTimeout(() => setAnnouncement(null), 3000)
-  }, [])
+  const announce = useCallback(
+    (a: Announcement, dwellMs: number = ANNOUNCE_DWELL_MS.default) => {
+      setAnnouncement(a)
+      if (announceTimer.current) clearTimeout(announceTimer.current)
+      announceTimer.current = setTimeout(() => setAnnouncement(null), dwellMs)
+    },
+    [],
+  )
 
   useEffect(() => {
     playEnterRoom()
@@ -700,15 +704,14 @@ export const RoomView = ({
     // Coffee card revealed → the waiter wanders in (visible here, unlike during
     // an active break where the full-screen overlay would hide him).
     if (state.revealed && latestVotes.current.includes("☕")) setCoffeeRun(true)
-    announce(
-      state.revealed
-        ? revealQuip(latestVotes.current)
-        : {
-            emoji: "🤵",
-            title: "New round",
-            sub: "Place your votes, everyone",
-          },
-    )
+    if (state.revealed)
+      announce(revealQuip(latestVotes.current), ANNOUNCE_DWELL_MS.reveal)
+    else
+      announce({
+        emoji: "🤵",
+        title: "New round",
+        sub: "Place your votes, everyone",
+      })
   }, [state.revealed, announce])
 
   // The dealer pipes up when a charged reaction (love / the bird) lands.
