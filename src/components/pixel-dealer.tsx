@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import type { Announcement } from "@/components/room-view"
 import { playAhem } from "@/lib/sounds"
+import { TABLE_LAYER } from "@/lib/table-layers"
 
 // A poke replayed from another player: same id only fires once.
 export type RemotePoke = { id: number; variant?: string } | null
@@ -237,7 +238,10 @@ const PixelDealerInner = ({
   const bubble = announcement ?? chat
 
   return (
-    <div className="absolute -left-[19%] -bottom-[4%] z-10 flex flex-col items-start pointer-events-none">
+    <div
+      className="absolute -left-[19%] -bottom-[4%] flex flex-col items-start pointer-events-none"
+      style={{ zIndex: TABLE_LAYER.dealer }}
+    >
       <AnimatePresence mode="wait">
         {bubble && (
           <motion.div

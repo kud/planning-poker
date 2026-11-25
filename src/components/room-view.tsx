@@ -39,6 +39,7 @@ import {
   Spade,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { MOBILE_LAYER, TABLE_LAYER } from "@/lib/table-layers"
 import { Button } from "@/components/ui/button"
 import { SeatAvatar } from "@/components/seat-avatar"
 import { TableCard } from "@/components/table-card"
@@ -373,6 +374,7 @@ const cardStyle = (angle: number): React.CSSProperties => ({
   left: `${50 + 37 * Math.cos(angle)}%`,
   top: `${50 + 33 * Math.sin(angle)}%`,
   transform: "translate(-50%, -50%)",
+  zIndex: TABLE_LAYER.cards,
 })
 
 const ShareMenu = ({
@@ -1257,7 +1259,8 @@ export const RoomView = ({
                       damping: 24,
                       delay: i * 0.04,
                     }}
-                    className="flex flex-col items-center gap-2"
+                    className="relative flex flex-col items-center gap-2"
+                    style={{ zIndex: MOBILE_LAYER.seat }}
                   >
                     <SeatAvatar
                       participant={participant}
@@ -1353,7 +1356,10 @@ export const RoomView = ({
             </div>
 
             {/* Centre content — above the cards so stats are never covered */}
-            <div className="absolute inset-0 z-10 flex items-center justify-center px-[12%] pointer-events-none [&_*]:pointer-events-auto">
+            <div
+              className="absolute inset-0 flex items-center justify-center px-[12%] pointer-events-none [&_*]:pointer-events-auto"
+              style={{ zIndex: TABLE_LAYER.centre }}
+            >
               <RoundControls
                 state={state}
                 voteCount={voteCount}
@@ -1697,7 +1703,10 @@ export const RoomView = ({
         {/* Dealer announcements on mobile — the pixel dealer handles desktop */}
         <AnimatePresence>
           {announcement && (
-            <div className="fixed inset-0 z-30 flex items-center justify-center pointer-events-none md:hidden">
+            <div
+              className="fixed inset-0 flex items-center justify-center pointer-events-none md:hidden"
+              style={{ zIndex: MOBILE_LAYER.announcement }}
+            >
               <motion.div
                 initial={{ scale: 0.6, opacity: 0, y: 24 }}
                 animate={{ scale: 1, opacity: 1, y: 0 }}
