@@ -1,6 +1,5 @@
-// How long the dealer's bubble stays up. The reveal quip clears sooner so the
-// freshly flipped cards are readable; everything else keeps the longer dwell.
+// How long a passing dealer line (new round, streak, timer, reaction, small
+// talk) stays up before the status line hands back to whatever it showed.
 export const ANNOUNCE_DWELL_MS = {
   default: 3000,
-  reveal: 2000,
 } as const

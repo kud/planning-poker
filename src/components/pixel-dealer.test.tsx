@@ -1,29 +1,45 @@
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, it, expect } from "vitest"
-import { PixelDealer } from "./pixel-dealer"
-import { TABLE_LAYER } from "@/lib/table-layers"
+import { DealerLinePill, PixelDealer } from "./pixel-dealer"
 
-describe("pixel dealer layering", () => {
-  it("renders with the dealer layer z-index and without z-10 class", () => {
+describe("pixel dealer", () => {
+  it("stands on the stage with no speech bubble of his own", () => {
     const html = renderToStaticMarkup(
       <PixelDealer
-        announcement={{ emoji: "🃏", title: "Reveal", sub: "Cards up" }}
-      />
+        className="bottom-4 left-[7.5rem]"
+        lineSeq={1}
+        onSmallTalk={() => {}}
+      />,
     )
-    expect(html).toContain(`z-index:${TABLE_LAYER.dealer}`)
-    expect(html).not.toContain("z-10")
+    expect(html).toContain("left-[7.5rem]")
+    expect(html).toContain('data-prop="dealer"')
+    expect(html).not.toContain("w-60")
+    expect(html).not.toContain("line-clamp-1")
   })
 })
 
-describe("pixel dealer speech bubble", () => {
-  it("stays narrow and clamps its sub-line to one line", () => {
+describe("dealer line", () => {
+  it("shows the title alone, on one truncated line, with the dealer's head", () => {
     const html = renderToStaticMarkup(
-      <PixelDealer
-        announcement={{ emoji: "🃏", title: "Reveal", sub: "Cards up" }}
-      />
+      <DealerLinePill line={{ emoji: "🃏", title: "All over the map" }} />,
     )
-    expect(html).toContain("w-60")
-    expect(html).not.toContain("w-80")
-    expect(html).toContain("line-clamp-1")
+    expect(html).toContain("All over the map")
+    expect(html).toContain("truncate")
+    expect(html).toContain("max-w-[min(36rem,100%)]")
+    expect(html).toContain('viewBox="3 0 7 7"')
+    expect(html).not.toContain(" — ")
+  })
+
+  it("keeps small talk's sub on the same line", () => {
+    const html = renderToStaticMarkup(
+      <DealerLinePill
+        line={{
+          emoji: "🐈",
+          title: "Mind the cat",
+          sub: "Judging your velocity.",
+        }}
+      />,
+    )
+    expect(html).toContain("Mind the cat — Judging your velocity.")
   })
 })
