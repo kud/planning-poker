@@ -1453,11 +1453,13 @@ export const RoomView = ({
           )}
           {amSpectator ? (
             <div className="flex flex-col items-center gap-2 py-3 text-center">
-              <AnimatePresence mode="wait" initial={false}>
-                {dealer.line && (
-                  <DealerLinePill key={dealer.seq} line={dealer.line} />
-                )}
-              </AnimatePresence>
+              <div className="flex h-8 items-center justify-center">
+                <AnimatePresence mode="wait" initial={false}>
+                  {dealer.line && (
+                    <DealerLinePill key={dealer.seq} line={dealer.line} />
+                  )}
+                </AnimatePresence>
+              </div>
               <p
                 className={`flex items-center justify-center gap-1.5 text-sm font-medium ${s.handLabel}`}
               >
@@ -1479,9 +1481,10 @@ export const RoomView = ({
               data-tour="hand"
               className="flex flex-col items-center gap-3 sm:gap-5"
             >
-              {/* On phones the row sits left, clear of the break/reaction
+              {/* A fixed height, so the dealer speaking never nudges the hand.
+                  On phones the row sits left, clear of the break/reaction
                   bar pinned top-right of the hand. */}
-              <div className="flex min-h-7 max-w-full min-w-0 items-center justify-center gap-3 max-sm:max-w-[calc(100%-10rem)] max-sm:self-start">
+              <div className="flex h-8 max-w-full min-w-0 items-center justify-center gap-3 max-sm:max-w-[calc(100%-10rem)] max-sm:self-start">
                 <AnimatePresence mode="wait" initial={false}>
                   {dealer.line ? (
                     <DealerLinePill key={dealer.seq} line={dealer.line} />
