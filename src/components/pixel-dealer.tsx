@@ -1,14 +1,14 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
-import { motion, AnimatePresence } from "framer-motion"
-import type { Announcement } from "@/components/room-view"
+import { useEffect, useEffectEvent, useRef, useState } from "react"
+import { motion } from "framer-motion"
 import { playAhem } from "@/lib/sounds"
+import type { DealerLine } from "@/lib/dealer-line"
 
 // A poke replayed from another player: same id only fires once.
 export type RemotePoke = { id: number; variant?: string } | null
 
-const SMALL_TALK: Announcement[] = [
+const SMALL_TALK: Required<DealerLine>[] = [
   {
     emoji: "🎩",
     title: "House rules",
@@ -180,43 +180,74 @@ export const DealerSprite = () => (
   </svg>
 )
 
-export const PixelDealer = ({
-  announcement,
-  onPoke,
-  remotePoke,
-}: {
-  announcement: Announcement | null
-  onPoke?: (variant?: string) => void
-  remotePoke?: RemotePoke
-}) => (
-  <PixelDealerInner
-    announcement={announcement}
-    onPoke={onPoke}
-    remotePoke={remotePoke}
-  />
+// The dealer's head (rows 0–6 of the sprite), squared to sit in a line of text.
+export const DealerHead = ({ size = 16 }: { size?: number }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="3 0 7 7"
+    shapeRendering="crispEdges"
+    aria-hidden
+    className="shrink-0"
+  >
+    {DEALER_PIXELS.filter(([, y]) => y < 7).map(([x, y, w, h, fill], i) => (
+      <rect
+        key={i}
+        x={x}
+        y={y}
+        width={w}
+        height={Math.min(h, 7 - y)}
+        fill={fill}
+      />
+    ))}
+  </svg>
 )
 
-const PixelDealerInner = ({
-  announcement,
+// The dealer's line, docked in the status line above the hand.
+export const DealerLinePill = ({ line }: { line: DealerLine }) => (
+  <motion.p
+    initial={{ opacity: 0, y: 4 }}
+    animate={{ opacity: 1, y: 0 }}
+    exit={{ opacity: 0, y: -4 }}
+    transition={{ duration: 0.18 }}
+    data-testid="dealer-line"
+    className="flex min-w-0 max-w-[min(36rem,100%)] items-center gap-2 rounded-full border border-yellow-500/40 bg-[#10131f]/95 px-3 py-1 text-sm"
+  >
+    <DealerHead />
+    <span aria-hidden className="shrink-0 leading-none">
+      {line.emoji}
+    </span>
+    <span className="font-semibold text-yellow-100 truncate">
+      {line.sub ? `${line.title} — ${line.sub}` : line.title}
+    </span>
+  </motion.p>
+)
+
+export const PixelDealer = ({
+  lineSeq,
+  onSmallTalk,
   onPoke,
   remotePoke,
+  className = "",
 }: {
-  announcement: Announcement | null
+  // Bumps each time a line lands, so he bobs once per line.
+  lineSeq: number
+  onSmallTalk: (line: DealerLine) => void
   onPoke?: (variant?: string) => void
   remotePoke?: RemotePoke
+  className?: string
 }) => {
-  const [chat, setChat] = useState<Announcement | null>(null)
   const lastQuip = useRef(-1)
-  const chatTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [bobbedSeq, setBobbedSeq] = useState(lineSeq)
+  const bobbing = lineSeq !== bobbedSeq
 
-  // Show a specific quip (so a remote poke makes everyone hear the same line).
+  // Say a specific quip (so a remote poke makes everyone hear the same line).
   const quipAt = (index: number) => {
     playAhem()
     lastQuip.current = index
-    setChat(SMALL_TALK[index])
-    if (chatTimer.current) clearTimeout(chatTimer.current)
-    chatTimer.current = setTimeout(() => setChat(null), 3500)
+    onSmallTalk(SMALL_TALK[index])
   }
+  const replayQuip = useEffectEvent(quipAt)
 
   const speak = () => {
     let index = Math.floor(Math.random() * SMALL_TALK.length)
@@ -231,54 +262,28 @@ const PixelDealerInner = ({
     if (!remotePoke || remotePoke.id === lastRemote.current) return
     lastRemote.current = remotePoke.id
     const index = Number(remotePoke.variant)
-    quipAt(Number.isInteger(index) && SMALL_TALK[index] ? index : 0)
+    replayQuip(Number.isInteger(index) && SMALL_TALK[index] ? index : 0)
   }, [remotePoke])
 
-  const bubble = announcement ?? chat
-
   return (
-    <div className="absolute -left-[19%] -bottom-[4%] z-10 flex flex-col items-start pointer-events-none">
-      <AnimatePresence mode="wait">
-        {bubble && (
-          <motion.div
-            key={bubble.title}
-            initial={{ opacity: 0, y: 10, scale: 0.85 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 6, scale: 0.9 }}
-            transition={{ type: "spring", stiffness: 340, damping: 24 }}
-            className="absolute bottom-full mb-3 w-80"
-          >
-            <div className="rounded-2xl border border-yellow-500/40 bg-[#10131f]/95 backdrop-blur-md px-5 py-3.5 shadow-[0_10px_32px_rgba(0,0,0,0.5),0_0_18px_rgba(234,179,8,0.18)]">
-              <div className="flex items-start gap-3">
-                <span className="text-3xl leading-none">{bubble.emoji}</span>
-                <div className="min-w-0">
-                  <p className="text-base font-semibold text-yellow-100 leading-snug">
-                    {bubble.title}
-                  </p>
-                  <p className="text-sm text-yellow-200/70 italic leading-snug mt-1">
-                    {bubble.sub}
-                  </p>
-                </div>
-              </div>
-            </div>
-            <div className="absolute -bottom-1 left-7 w-2.5 h-2.5 rotate-45 border-b border-r border-yellow-500/40 bg-[#10131f]" />
-          </motion.div>
-        )}
-      </AnimatePresence>
+    <div className={`absolute pointer-events-none ${className}`}>
       <motion.div
         data-prop="dealer"
         onClick={speak}
         className="pointer-events-auto cursor-pointer"
         animate={
-          bubble
+          bobbing
             ? { rotate: [0, 7, 7, 0], y: 0 }
             : { y: [0, -1.5, 0], rotate: 0 }
         }
         transition={
-          bubble
+          bobbing
             ? { duration: 1.1, times: [0, 0.25, 0.7, 1], ease: "easeInOut" }
             : { duration: 3, repeat: Infinity, ease: "easeInOut" }
         }
+        onAnimationComplete={() => {
+          if (bobbing) setBobbedSeq(lineSeq)
+        }}
         style={{ transformOrigin: "bottom center" }}
       >
         <DealerSprite />

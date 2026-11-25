@@ -39,6 +39,7 @@ import {
   Spade,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useDealerLine } from "@/lib/dealer-line"
 import { Button } from "@/components/ui/button"
 import { SeatAvatar } from "@/components/seat-avatar"
 import { TableCard } from "@/components/table-card"
@@ -57,7 +58,7 @@ import { VOTE_MASK } from "@/lib/constants"
 import { SettingsDialog } from "@/components/settings-dialog"
 import { OnboardingHints } from "@/components/onboarding-hints"
 import { PixelPet } from "@/components/pixel-pet"
-import { PixelDealer } from "@/components/pixel-dealer"
+import { DealerLinePill, PixelDealer } from "@/components/pixel-dealer"
 import { PixelWaiter } from "@/components/pixel-waiter"
 import { PixelPlant } from "@/components/pixel-plant"
 import { ReactionBar } from "@/components/reaction-bar"
@@ -643,7 +644,6 @@ export const RoomView = ({
   )
   const theme: Theme = themePref === "system" ? systemTheme : themePref
   const [rageActive, setRageActive] = useState(false)
-  const [announcement, setAnnouncement] = useState<Announcement | null>(null)
   const [rollingDice, setRollingDice] = useState(false)
   const [muted, setMutedState] = useState(isMuted)
   const [coffeeRun, setCoffeeRun] = useState(false)
@@ -663,14 +663,14 @@ export const RoomView = ({
     if (breakStatus === "active") setCoffeeRun(true)
   }
 
-  // Single owned dismiss timer: any new announcement supersedes the previous
-  // one's close, so an unrelated re-render can never strand the bubble open.
-  const announceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const announce = useCallback((a: Announcement) => {
-    setAnnouncement(a)
-    if (announceTimer.current) clearTimeout(announceTimer.current)
-    announceTimer.current = setTimeout(() => setAnnouncement(null), 3000)
-  }, [])
+  // The dealer speaks in the status line above the hand. The reveal line holds
+  // for the round; anything else passes over it, then hands back.
+  const dealer = useDealerLine()
+  const { say: dealerSay, hold: dealerHold } = dealer
+  const announce = useCallback(
+    ({ emoji, title }: Announcement) => dealerSay({ emoji, title }),
+    [dealerSay],
+  )
 
   useEffect(() => {
     playEnterRoom()
@@ -698,16 +698,18 @@ export const RoomView = ({
     // Coffee card revealed → the waiter wanders in (visible here, unlike during
     // an active break where the full-screen overlay would hide him).
     if (state.revealed && latestVotes.current.includes("☕")) setCoffeeRun(true)
-    announce(
-      state.revealed
-        ? revealQuip(latestVotes.current)
-        : {
-            emoji: "🤵",
-            title: "New round",
-            sub: "Place your votes, everyone",
-          },
-    )
-  }, [state.revealed, announce])
+    if (state.revealed) {
+      const { emoji, title } = revealQuip(latestVotes.current)
+      dealerHold({ emoji, title })
+    } else {
+      dealerHold(null)
+      announce({
+        emoji: "🤵",
+        title: "New round",
+        sub: "Place your votes, everyone",
+      })
+    }
+  }, [state.revealed, announce, dealerHold])
 
   // The dealer pipes up when a charged reaction (love / the bird) lands.
   const lastReactedId = useRef(0)
@@ -1235,6 +1237,15 @@ export const RoomView = ({
             onPoke={() => onPokeProp?.("plant-right")}
             remotePoke={remotePokeFor("plant-right")}
           />
+          {/* The dealer stands off the table, right of the left plant; his
+              lines go to the status line above the hand. */}
+          <PixelDealer
+            className="bottom-4 left-[7.5rem] hidden md:block"
+            lineSeq={dealer.seq}
+            onSmallTalk={dealerSay}
+            onPoke={(v) => onPokeProp?.("dealer", v)}
+            remotePoke={remotePokeFor("dealer")}
+          />
           {/* Mobile — roster grid, no table */}
           <div className="md:hidden w-full max-h-full overflow-y-auto px-4 py-5 flex flex-col items-center gap-6">
             <div
@@ -1313,11 +1324,6 @@ export const RoomView = ({
             className="relative hidden md:block"
             style={{ width: "min(640px, 74vw)", aspectRatio: "640 / 268" }}
           >
-            <PixelDealer
-              announcement={announcement}
-              onPoke={(v) => onPokeProp?.("dealer", v)}
-              remotePoke={remotePokeFor("dealer")}
-            />
             {/* Felt */}
             <div
               className="absolute inset-0"
@@ -1447,6 +1453,13 @@ export const RoomView = ({
           )}
           {amSpectator ? (
             <div className="flex flex-col items-center gap-2 py-3 text-center">
+              <div className="flex h-8 items-center justify-center">
+                <AnimatePresence mode="wait" initial={false}>
+                  {dealer.line && (
+                    <DealerLinePill key={dealer.seq} line={dealer.line} />
+                  )}
+                </AnimatePresence>
+              </div>
               <p
                 className={`flex items-center justify-center gap-1.5 text-sm font-medium ${s.handLabel}`}
               >
@@ -1468,14 +1481,28 @@ export const RoomView = ({
               data-tour="hand"
               className="flex flex-col items-center gap-3 sm:gap-5"
             >
-              <div className="flex items-baseline gap-3">
+              {/* A fixed height, so the dealer speaking never nudges the hand.
+                  On phones the row sits left, clear of the break/reaction
+                  bar pinned top-right of the hand. */}
+              <div className="flex h-8 max-w-full min-w-0 items-center justify-center gap-3 max-sm:max-w-[calc(100%-10rem)] max-sm:self-start">
+                <AnimatePresence mode="wait" initial={false}>
+                  {dealer.line ? (
+                    <DealerLinePill key={dealer.seq} line={dealer.line} />
+                  ) : (
+                    <motion.p
+                      key="hand-label"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.18 }}
+                      className={`text-[10px] sm:text-xs font-medium tracking-wide uppercase ${s.handLabel}`}
+                    >
+                      {state.revealed ? "Waiting for next round…" : "Your hand"}
+                    </motion.p>
+                  )}
+                </AnimatePresence>
                 <p
-                  className={`text-[10px] sm:text-xs font-medium tracking-wide uppercase ${s.handLabel}`}
-                >
-                  {state.revealed ? "Waiting for next round…" : "Your hand"}
-                </p>
-                <p
-                  className={`hidden sm:block text-[10px] font-mono opacity-60 ${s.handLabel}`}
+                  className={`hidden sm:block shrink-0 text-[10px] font-mono opacity-60 ${s.handLabel}`}
                 >
                   {isHost
                     ? state.revealed
@@ -1691,32 +1718,6 @@ export const RoomView = ({
                 </div>
               </motion.div>
             </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Dealer announcements on mobile — the pixel dealer handles desktop */}
-        <AnimatePresence>
-          {announcement && (
-            <div className="fixed inset-0 z-30 flex items-center justify-center pointer-events-none md:hidden">
-              <motion.div
-                initial={{ scale: 0.6, opacity: 0, y: 24 }}
-                animate={{ scale: 1, opacity: 1, y: 0 }}
-                exit={{ scale: 0.92, opacity: 0, y: -16 }}
-                transition={{ type: "spring", stiffness: 320, damping: 22 }}
-                className="flex items-center gap-3 rounded-full border-2 border-yellow-500/60 bg-[#10131f]/90 backdrop-blur-md px-6 py-3 shadow-[0_0_40px_rgba(234,179,8,0.3)]"
-              >
-                <span className="text-2xl">{announcement.emoji}</span>
-                <div className="flex flex-col">
-                  <span className="text-sm font-semibold text-yellow-100 tracking-wide">
-                    {announcement.title}
-                  </span>
-                  <span className="text-xs text-yellow-200/60 italic">
-                    {announcement.sub}
-                  </span>
-                </div>
-                <span className="text-2xl">🃏</span>
-              </motion.div>
-            </div>
           )}
         </AnimatePresence>
 
